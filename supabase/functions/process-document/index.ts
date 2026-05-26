@@ -23,10 +23,14 @@ serve(async (req) => {
   if (!['cnh', 'print_earnings'].includes(payload.kind)) return json({ error: 'Invalid kind' }, 400)
   if (!payload.imageBase64 || payload.imageBase64.length < 100) return json({ error: 'Empty image' }, 400)
 
-  // Tamanho máximo 6MB (limite do Anthropic Vision; ~8MB base64)
-  if (payload.imageBase64.length > 8_500_000) return json({ error: 'Image too large (max 6MB)' }, 413)
+  // Anthropic Vision aceita até 5MB base64 (~3.75MB binário) — apertar p/ 5MB.
+  if (payload.imageBase64.length > 5_000_000) return json({ error: 'Image too large (max ~3.75MB)' }, 413)
 
-  const mediaType = (payload.mediaType ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp'
+  const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp'] as const
+  const mediaType = (payload.mediaType ?? 'image/jpeg').toLowerCase() as typeof ALLOWED_MEDIA[number]
+  if (!ALLOWED_MEDIA.includes(mediaType)) {
+    return json({ error: `Unsupported mediaType (use ${ALLOWED_MEDIA.join(', ')})` }, 415)
+  }
 
   // 1. Upload to storage (bucket "documents", path = userId/kind-timestamp.ext)
   const ext = mediaType.split('/')[1].replace('jpeg', 'jpg')

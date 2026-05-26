@@ -39,7 +39,7 @@ serve(async (req) => {
     p_score: result.score,
     p_limit_brl: result.limit_brl,
     p_interest_pct: result.interest_pct,
-    p_inputs: JSON.stringify(result.inputs),
+    p_inputs: result.inputs,
   })
   if (rpcErr) return json({ error: rpcErr.message }, 500)
 
