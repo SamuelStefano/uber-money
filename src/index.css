@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Inter+Tight:wght@500;600;700;800;900&display=swap');
+@import '@solana/wallet-adapter-react-ui/styles.css';
+
+:root {
+  --ink: #0A0A0B; --ink-2: #1A1A1D;
+  --mute: #6B6B72; --mute-2: #A3A3AA;
+  --line: #ECECEE; --line-2: #F4F4F5;
+  --paper: #FFFFFF; --canvas: #F6F6F4;
+  --accent: #00C26E; --accent-deep: #009E58; --accent-soft: #E5FAF0;
+  --warn: #E25C2B;
+  --shadow-sm: 0 1px 2px rgba(10,10,15,0.04), 0 1px 0 rgba(10,10,15,0.02);
+  --shadow-md: 0 4px 12px rgba(10,10,15,0.05), 0 1px 2px rgba(10,10,15,0.04);
+  --shadow-lg: 0 24px 48px -12px rgba(10,10,15,0.18), 0 8px 16px -6px rgba(10,10,15,0.08);
+  --shadow-glow: 0 12px 40px -8px rgba(0,194,110,0.45), 0 4px 12px -4px rgba(0,194,110,0.25);
+}
+
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html, body { margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; color: var(--ink); height: 100%; }
+body { background: var(--canvas); overflow: hidden; }
+#root { height: 100vh; width: 100vw; overflow: hidden; position: relative; }
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; padding: 0; color: inherit; }
+button:disabled { cursor: not-allowed; }
+input { font-family: inherit; }
+input:focus { outline: none; }
+
+.app-scroll::-webkit-scrollbar { display: none; }
+.app-scroll { scrollbar-width: none; }
+.tabular { font-variant-numeric: tabular-nums; }
+.tight { font-family: 'Inter Tight', 'Inter', system-ui, sans-serif; letter-spacing: -0.02em; }
+::selection { background: var(--accent); color: white; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+.confetti-dot { position: absolute; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; will-change: transform, opacity; }
+
+@keyframes notif-in {
+  from { transform: translate(-50%, -100%); opacity: 0; }
+  60% { transform: translate(-50%, 6%); opacity: 1; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+@keyframes pulse-ring { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes confetti-fly {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
