@@ -3,7 +3,7 @@ seeds = false
 skip-lint = false
 
 [programs.devnet]
-uber-money = "UbrMny1111111111111111111111111111111111111"
+uber-money = "6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N"
 
 [registry]
 url = "https://api.apr.dev"

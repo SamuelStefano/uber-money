@@ -1,14 +1,14 @@
 //! Uber Money — programa Anchor para escrow USDC + liberação de empréstimo.
 //!
-//! ⚠️ Program ID abaixo é PLACEHOLDER. Gerar real com:
+//! Program ID gerado em 26/05/2026. Pra regenerar:
 //!     solana-keygen new -o target/deploy/uber_money-keypair.json
 //!     anchor keys list   # copiar o pubkey gerado
-//! Depois atualizar `declare_id!()` e `Anchor.toml`. Rebuild obrigatório.
+//! Depois atualizar `declare_id!()` + `Anchor.toml`. Rebuild obrigatório.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("UbrMny1111111111111111111111111111111111111");
+declare_id!("6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N");
 
 const SCORE_THRESHOLD: u16 = 600;
 // Hard cap por transação no escrow (sandbox = 100 USDC com 6 decimals = R$ ~500 demo).

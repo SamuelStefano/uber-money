@@ -2,13 +2,12 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AppFrame, ToastProvider } from './components'
-import { LoginScreen, HomeScreen, RequestScreen, AnalysisScreen, ApprovedScreen } from './screens'
+import { LoginScreen, UploadScreen, HomeScreen, RequestScreen, AnalysisScreen, ApprovedScreen } from './screens'
 import { Store } from './services'
 
 export function App() {
-  const [route, setRoute] = useState<'login' | 'home' | 'request' | 'analysis' | 'approved'>('login')
+  const [route, setRoute] = useState<'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved'>('login')
   const [pendingPayload, setPendingPayload] = useState<any>(null)
-  const [balanceAnimKey, setBalanceAnimKey] = useState(0)
   const [hasNavigated, setHasNavigated] = useState(false)
   const [dir, setDir] = useState(1)
 
@@ -38,10 +37,9 @@ export function App() {
             transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
             style={{ position: 'absolute', inset: 0 }}
           >
-            {route === 'login' && <LoginScreen onLogin={() => go('home', 1)} />}
-            {route === 'home' && (
-              <HomeScreen balanceAnimKey={balanceAnimKey} onRequestCredit={() => go('request', 1)} />
-            )}
+            {route === 'login' && <LoginScreen onLogin={() => go('upload', 1)} />}
+            {route === 'upload' && <UploadScreen onDone={(_docs: any) => { Store.set({ documents: _docs }); go('home', 1) }} />}
+            {route === 'home' && <HomeScreen onRequestCredit={() => go('request', 1)} />}
             {route === 'request' && (
               <RequestScreen
                 onBack={() => go('home', -1)}
@@ -60,7 +58,7 @@ export function App() {
             {route === 'approved' && (
               <ApprovedScreen
                 decision={Store.get().lastDecision}
-                onHome={() => { setBalanceAnimKey((k) => k + 1); go('home', -1) }}
+                onHome={() => go('home', -1)}
               />
             )}
           </motion.div>

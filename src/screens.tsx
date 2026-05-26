@@ -603,3 +603,116 @@ function ReceiptRow({ label, value, sub, mono, last }: any) {
     </div>
   )
 }
+
+// ═══ 2.5 UPLOAD DOCUMENTOS (CNH + extrato Uber) ══════════════════
+import { HAS_BACKEND, processDocument, fileToBase64 } from './lib/api'
+
+export function UploadScreen({ onDone }: any) {
+  const [cnh, setCnh] = React.useState<any>(null)
+  const [earnings, setEarnings] = React.useState<any>(null)
+  const [loading, setLoading] = React.useState<'cnh' | 'print_earnings' | null>(null)
+  const [err, setErr] = React.useState<string | null>(null)
+  const toast = useToast()
+
+  const handle = async (file: File, kind: 'cnh' | 'print_earnings') => {
+    if (!file) return
+    setLoading(kind); setErr(null)
+    try {
+      if (HAS_BACKEND) {
+        const b64 = await fileToBase64(file)
+        const result = await processDocument(kind, b64, file.type as any)
+        if (kind === 'cnh') setCnh(result.ocr_data)
+        else setEarnings(result.ocr_data)
+        toast.push(kind === 'cnh' ? 'CNH lida' : 'Extrato lido')
+      } else {
+        // mock OCR (sem backend): simula leitura
+        await new Promise((r) => setTimeout(r, 1200))
+        if (kind === 'cnh') {
+          setCnh({ name: 'Samuel Reis', cpf: '123.456.789-00', category: 'B', valid_until: '2028-12-31', confidence: 'high' })
+        } else {
+          setEarnings({ gross_monthly_income: 4250, currency: 'BRL', period_days: 30, ride_count: 412, source: 'uber', confidence: 'high' })
+        }
+        toast.push('OCR mockado (sem backend configurado)')
+      }
+    } catch (e: any) {
+      setErr(String(e?.message ?? e))
+      toast.push('Falha ao ler. Tente outra foto.')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const both = !!cnh && !!earnings
+
+  return (
+    <Screen label="02.5 Upload" scroll>
+      <div style={{ flex: 1, padding: '40px 48px 60px', maxWidth: 880, margin: '0 auto', width: '100%' }}>
+        <h1 className="tight" style={{ fontSize: 44, fontWeight: 800, margin: '20px 0 0', letterSpacing: '-0.035em', lineHeight: 1.05 }}>
+          Pra começar, envie 2 fotos.
+        </h1>
+        <p style={{ marginTop: 12, fontSize: 16, color: 'var(--mute)' }}>
+          Sua CNH e a tela de ganhos da semana. Vamos ler os números pra calcular seu score.
+        </p>
+
+        <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
+          <UploadZone label="Sua CNH" hint="Frente, boa luz" kind="cnh" onFile={(f) => handle(f, 'cnh')} loading={loading === 'cnh'} result={cnh} renderResult={(d: any) => d?.name ? `${d.name} · cat. ${d.category ?? '?'}` : 'Lido'} />
+          <UploadZone label="Tela de ganhos (Uber)" hint="Print do app" kind="earnings" onFile={(f) => handle(f, 'print_earnings')} loading={loading === 'print_earnings'} result={earnings} renderResult={(d: any) => d?.gross_monthly_income ? `R$ ${Number(d.gross_monthly_income).toFixed(0)}/mês · ${d.ride_count ?? '?'} corridas` : 'Lido'} />
+        </div>
+
+        {err && <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: '#FEE', color: '#900', fontSize: 13 }}>{err}</div>}
+
+        <div style={{ marginTop: 36, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <Button variant="accent" size="lg" disabled={!both} onClick={() => onDone({ cnh, earnings })} icon={<Icon.ArrowRight />} style={{ minWidth: 280 }}>
+            Continuar
+          </Button>
+          <div style={{ fontSize: 12, color: 'var(--mute-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon.Shield /><span>Seus dados ficam off-chain (LGPD). Só o score vai pra blockchain.</span>
+          </div>
+        </div>
+      </div>
+    </Screen>
+  )
+}
+
+function UploadZone({ label, hint, kind, onFile, loading, result, renderResult }: any) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [drag, setDrag] = React.useState(false)
+  const done = !!result
+
+  return (
+    <label
+      onDragOver={(e: any) => { e.preventDefault(); setDrag(true) }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e: any) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer?.files?.[0]; if (f) onFile(f) }}
+      style={{
+        minHeight: 220, borderRadius: 24, padding: 24, cursor: 'pointer',
+        background: done ? 'var(--accent-soft)' : drag ? '#F7F7F5' : '#fff',
+        boxShadow: done ? 'inset 0 0 0 2px var(--accent)' : drag ? 'inset 0 0 0 2px var(--ink)' : 'inset 0 0 0 1.4px var(--line)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        transition: 'all 180ms ease',
+      }}
+    >
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={(e: any) => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>{label}</div>
+          {done && <span style={{ width: 26, height: 26, borderRadius: 999, background: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#04140B' }}><Icon.Check style={{ width: 16, height: 16 }} /></span>}
+        </div>
+        <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--mute)' }}>{hint}</div>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--mute)' }}>
+          <Spinner size={18} /> <span>Lendo com IA…</span>
+        </div>
+      ) : done ? (
+        <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 600 }}>{renderResult(result)}</div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 32, color: 'var(--mute-2)' }}>+</span>
+          <span style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 500 }}>Arraste ou clique pra enviar</span>
+        </div>
+      )}
+    </label>
+  )
+}
