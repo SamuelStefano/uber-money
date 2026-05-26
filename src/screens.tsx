@@ -509,7 +509,7 @@ export function ApprovedScreen({ decision, onHome }: any) {
           <div style={{ marginTop: 22, display: 'inline-flex', alignItems: 'center', gap: 14, fontSize: 14, color: 'var(--mute)', fontWeight: 500, padding: '8px 16px', borderRadius: 999, background: '#fff', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--accent)' }} />
-              Score {decision.score}/100
+              Score {Math.round(decision.score / 10)}/100
             </span>
             <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
             <span>{decision.installments}× sem complicação</span>

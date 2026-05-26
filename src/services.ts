@@ -28,13 +28,6 @@ export const timeBR = (iso: string) =>
 export const dateBR = (iso: string) =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 
-export function fakeSolanaAddress() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789'
-  let s = ''
-  for (let i = 0; i < 44; i++) s += chars[Math.floor(Math.random() * chars.length)]
-  return s
-}
-
 export async function getWallet() {
   await sleep(400, 700)
   return { balanceBRL: 0, pixKey: 'samuel.reis@uber.com' }
@@ -43,16 +36,18 @@ export async function getWallet() {
 export async function requestCredit(payload: any) {
   // → Score off-chain (Chainlink CRE) + empréstimo on-chain (Solana Anchor)
   await sleep(1900, 2400)
-  const base = Math.min(95, 55 + payload.ridesPerWeek * 0.3 + payload.yearsDriving * 2)
-  const score = Math.round(base + (payload.weeklyEarningsBRL > 1500 ? 8 : 0))
-  const approved = ALWAYS_APPROVE || score >= 60
-  const interestPct = score >= 80 ? 2.9 : score >= 70 ? 3.9 : 4.9
+  // Score scale 0-1000 (matches Anchor SCORE_THRESHOLD=600 + Postgres CHECK 0-1000).
+  // UI displays score/10 as "X/100" for readability.
+  const base = Math.min(950, 550 + payload.ridesPerWeek * 3 + payload.yearsDriving * 20)
+  const score = Math.round(base + (payload.weeklyEarningsBRL > 1500 ? 80 : 0))
+  const approved = ALWAYS_APPROVE || score >= 600
+  const interestPct = score >= 800 ? 2.9 : score >= 700 ? 3.9 : 4.9
   const installments = payload.amountBRL <= 200 ? 2 : payload.amountBRL <= 350 ? 3 : 4
   const due = new Date()
   due.setDate(due.getDate() + 7)
   return {
     approved,
-    score: Math.min(99, score),
+    score: Math.min(990, score),
     approvedAmountBRL: payload.amountBRL,
     installments,
     interestPct,
@@ -140,4 +135,3 @@ export function useCountUp(target: number, { duration = 1100, initialValue }: { 
   return value
 }
 
-// useRef shim (import here to avoid circular)

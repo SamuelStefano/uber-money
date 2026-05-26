@@ -1,9 +1,19 @@
+//! Uber Money — programa Anchor para escrow USDC + liberação de empréstimo.
+//!
+//! ⚠️ Program ID abaixo é PLACEHOLDER. Gerar real com:
+//!     solana-keygen new -o target/deploy/uber_money-keypair.json
+//!     anchor keys list   # copiar o pubkey gerado
+//! Depois atualizar `declare_id!()` e `Anchor.toml`. Rebuild obrigatório.
+
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 declare_id!("UbrMny1111111111111111111111111111111111111");
 
 const SCORE_THRESHOLD: u16 = 600;
+// Hard cap por transação no escrow (sandbox = 100 USDC com 6 decimals = R$ ~500 demo).
+// Backend (Edge Function) cap real em R$ 10 (Pix); este é o cinto-e-suspensório on-chain.
+const MAX_AMOUNT_USDC: u64 = 100_000_000;
 const VAULT_SEED: &[u8] = b"vault";
 const LOAN_SEED: &[u8] = b"loan";
 
@@ -22,6 +32,9 @@ pub mod uber_money {
         Ok(())
     }
 
+    /// Anti-double: PDA seed = [LOAN, borrower] (1 PDA por wallet).
+    /// `is_open` controla concorrência; histórico de empréstimos vive em eventos
+    /// (`LoanReleased`/`LoanRepaid`) indexados off-chain.
     pub fn release_loan(
         ctx: Context<ReleaseLoan>,
         loan_id: u64,
@@ -30,6 +43,7 @@ pub mod uber_money {
     ) -> Result<()> {
         require!(score >= SCORE_THRESHOLD, UberError::ScoreTooLow);
         require!(amount > 0, UberError::InvalidAmount);
+        require!(amount <= MAX_AMOUNT_USDC, UberError::AmountAboveCap);
         require!(ctx.accounts.vault_token_account.amount >= amount, UberError::InsufficientVaultBalance);
 
         let loan = &mut ctx.accounts.loan;
@@ -172,8 +186,9 @@ impl Loan { pub const SIZE: usize = 32 + 8 + 8 + 2 + 8 + 8 + 1 + 1; }
 
 #[error_code]
 pub enum UberError {
-    #[msg("Score below threshold")] ScoreTooLow,
+    #[msg("Score below threshold (min 600/1000)")] ScoreTooLow,
     #[msg("Invalid amount")] InvalidAmount,
+    #[msg("Amount above on-chain cap")] AmountAboveCap,
     #[msg("Insufficient vault balance")] InsufficientVaultBalance,
     #[msg("Borrower already has an open loan")] LoanAlreadyOpen,
     #[msg("No open loan to repay")] LoanNotOpen,
