@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWallet } from '@solana/wallet-adapter-react'
+import bs58 from 'bs58'
+import { HAS_BACKEND, getNonce, verifyWallet, processDocument, fileToBase64 } from './lib/api'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { Screen, Button, Spinner, Card, Chip, Field, Money, Sheet, Icon, useToast } from './components'
 import {
@@ -17,22 +19,46 @@ export function LoginScreen({ onLogin }: any) {
   const toast = useToast()
   const [waiting, setWaiting] = useState(false)
 
-  // when wallet connects, set user and navigate
+  // when wallet connects: sign nonce → JWT (Supabase) → store user → navigate
   useEffect(() => {
-    if (wallet.connected && wallet.publicKey) {
-      const address = wallet.publicKey.toBase58()
-      Store.set({
-        user: {
-          id: uid('USR_'),
-          name: 'Motorista',
-          uberConnected: false,
-          walletAddress: address,
-          walletProvider: wallet.wallet?.adapter?.name || 'Phantom',
-        },
-      })
-      setWaiting(false)
-      onLogin()
-    }
+    if (!wallet.connected || !wallet.publicKey) return
+    const address = wallet.publicKey.toBase58()
+    ;(async () => {
+      try {
+        if (HAS_BACKEND && wallet.signMessage) {
+          const { nonce, message } = await getNonce(address)
+          const sig = await wallet.signMessage(new TextEncoder().encode(message))
+          const sigB58 = bs58.encode(sig)
+          const verified = await verifyWallet(address, nonce, sigB58)
+          Store.set({
+            user: {
+              id: verified.user_id,
+              name: 'Motorista',
+              uberConnected: false,
+              walletAddress: address,
+              walletProvider: wallet.wallet?.adapter?.name || 'Phantom',
+              accessToken: verified.access_token,
+            },
+          })
+        } else {
+          // mock mode — backend não configurado
+          Store.set({
+            user: {
+              id: uid('USR_'),
+              name: 'Motorista',
+              uberConnected: false,
+              walletAddress: address,
+              walletProvider: wallet.wallet?.adapter?.name || 'Phantom',
+            },
+          })
+        }
+        setWaiting(false)
+        onLogin()
+      } catch (e: any) {
+        toast.push('Falha na autenticação. Tente reconectar.')
+        setWaiting(false)
+      }
+    })()
   }, [wallet.connected, wallet.publicKey])
 
   const connect = () => {
@@ -605,7 +631,6 @@ function ReceiptRow({ label, value, sub, mono, last }: any) {
 }
 
 // ═══ 2.5 UPLOAD DOCUMENTOS (CNH + extrato Uber) ══════════════════
-import { HAS_BACKEND, processDocument, fileToBase64 } from './lib/api'
 
 export function UploadScreen({ onDone }: any) {
   const [cnh, setCnh] = React.useState<any>(null)

@@ -1,0 +1,8 @@
+# Supabase Edge Functions config.
+# Functions chamadas SEM JWT (public) precisam de verify_jwt=false.
+
+[functions.wallet-auth]
+verify_jwt = false
+
+[functions.woovi-webhook]
+verify_jwt = false
