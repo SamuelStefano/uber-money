@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "init-vault": "tsx scripts/init-vault.ts",
+    "anchor:build": "anchor build",
+    "anchor:deploy": "anchor deploy --provider.cluster devnet"
   },
   "dependencies": {
     "@solana/wallet-adapter-base": "^0.9.27",
@@ -23,7 +26,9 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
     "@eslint/js": "^10.0.1",
+    "@solana/spl-token": "^0.4.14",
     "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
@@ -34,6 +39,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.22.3",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12"
