@@ -11,7 +11,9 @@ import { json, handleOptions } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const JWT_SECRET = Deno.env.get('SUPABASE_JWT_SECRET')
+// Supabase bloqueia secrets com prefixo SUPABASE_*, daí usamos WALLET_JWT_SECRET
+// (valor é o mesmo JWT secret do projeto, configurado via `supabase secrets set`).
+const JWT_SECRET = Deno.env.get('WALLET_JWT_SECRET')
 const UUID_NAMESPACE = Deno.env.get('WALLET_UUID_NAMESPACE')
 const NONCE_TTL_MINUTES = 10
 const JWT_EXPIRY_SECONDS = 60 * 60 // 1h (refresh flow não implementado; ver DR-001 §Gap-C)
@@ -23,7 +25,7 @@ if (UUID_NAMESPACE === RFC_DNS_NAMESPACE) {
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
 
 async function mintJWT(userId: string, wallet: string): Promise<{ access_token: string }> {
-  if (!JWT_SECRET) throw new Error('SUPABASE_JWT_SECRET not set')
+  if (!JWT_SECRET) throw new Error('WALLET_JWT_SECRET not set')
   const secret = new TextEncoder().encode(JWT_SECRET)
   const now = Math.floor(Date.now() / 1000)
   const access_token = await new jose.SignJWT({
@@ -34,7 +36,8 @@ async function mintJWT(userId: string, wallet: string): Promise<{ access_token: 
     email: `${userId}@wallet.local`,
     app_metadata: { provider: 'solana_wallet', wallet },
     user_metadata: { wallet },
-    session_id: crypto.randomUUID(),
+    // NÃO incluir session_id — GoTrue valida contra auth.sessions e rejeita fake
+    // (memory: supabase_edge_auth_gotcha)
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt(now)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import bs58 from 'bs58'
@@ -25,9 +25,21 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
   const toast = useToast()
   const [waiting, setWaiting] = useState(false)
 
+  // Guard: useEffect só dispara fluxo de assinatura UMA vez por sessão de connect.
+  // Sem isso, qualquer re-render que mude deps refeitos (signMessage ref troca em re-renders)
+  // dispara novo signMessage → popup Phantom em loop.
+  const signedForPubkeyRef = useRef<string | null>(null)
+
+  // CRIT-1 fix: reset guard quando user desconecta — permite reconectar a mesma wallet.
+  useEffect(() => {
+    if (!wallet.connected) signedForPubkeyRef.current = null
+  }, [wallet.connected])
+
   useEffect(() => {
     if (!wallet.connected || !wallet.publicKey) return
     const address = wallet.publicKey.toBase58()
+    if (signedForPubkeyRef.current === address) return  // já assinou pra esta wallet
+    signedForPubkeyRef.current = address
     const providerName = wallet.wallet?.adapter?.name || 'Phantom'
 
     const run = async () => {
@@ -57,16 +69,21 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
         Store.set({ user })
         setWaiting(false)
         onLogin()
-      } catch {
+      } catch (e) {
+        // Dev visibility: detalhes do erro de auth ajudam diagnose sem expor pro user.
+        console.error('[login] auth flow failed:', e)
+        signedForPubkeyRef.current = null  // libera retry se falhou
         toast.push('Falha na autenticação. Tente reconectar.')
         setWaiting(false)
       }
     }
     void run()
-  }, [wallet.connected, wallet.publicKey, wallet.signMessage, wallet.wallet?.adapter?.name, onLogin, toast])
+  }, [wallet.connected, wallet.publicKey, onLogin, toast, wallet.signMessage, wallet.wallet?.adapter?.name])
 
   const connect = useCallback(() => {
     setWaiting(true)
+    // Reset guard: novo clique no botão = libera nova assinatura mesmo pra mesma wallet
+    signedForPubkeyRef.current = null
     try { setVisible(true) }
     catch { toast.push('Não foi possível abrir a carteira'); setWaiting(false) }
   }, [setVisible, toast])

@@ -40,3 +40,10 @@ target/
 test-ledger/
 .anchor/
 node_modules/
+
+# Supabase local state + temp
+supabase/.temp
+supabase/.branches
+
+# SDD spec-driven (gitignored per skill default)
+.sdd/
