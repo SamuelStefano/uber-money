@@ -22,6 +22,7 @@
     "@tanstack/react-query": "^5.100.14",
     "bs58": "^6.0.0",
     "framer-motion": "^11.18.2",
+    "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
