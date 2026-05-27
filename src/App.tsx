@@ -1,27 +1,37 @@
-// @ts-nocheck
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AppFrame, ToastProvider } from './components'
-import { LoginScreen, UploadScreen, HomeScreen, RequestScreen, AnalysisScreen, ApprovedScreen } from './screens'
-import { Store } from './services'
+import { AppFrame } from '@/components/organisms/app-frame'
+import { ToastProvider } from '@/components/organisms/toast-provider'
+import { LoginScreen } from '@/pages/login'
+import { UploadScreen } from '@/pages/upload'
+import { HomeScreen } from '@/pages/home'
+import { RequestScreen } from '@/pages/request'
+import { AnalysisScreen } from '@/pages/analysis'
+import { ApprovedScreen } from '@/pages/approved'
+import { Store } from '@/store'
+import { useStore } from '@/hooks/use-store'
+import type { LoanRequestPayload } from '@/types/api'
+
+type Route = 'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved'
+
+const variants = {
+  enter: (d: number) => ({ x: d > 0 ? 24 : -24, opacity: 0.0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (d: number) => ({ x: d > 0 ? -16 : 16, opacity: 0 }),
+}
 
 export function App() {
-  const [route, setRoute] = useState<'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved'>('login')
-  const [pendingPayload, setPendingPayload] = useState<any>(null)
+  const [route, setRoute] = useState<Route>('login')
+  const [pendingPayload, setPendingPayload] = useState<LoanRequestPayload | null>(null)
   const [hasNavigated, setHasNavigated] = useState(false)
   const [dir, setDir] = useState(1)
+  const [{ lastDecision }] = useStore()
 
-  const go = (next: any, direction = 1) => {
+  const go = useCallback((next: Route, direction = 1) => {
     setDir(direction)
     setRoute(next)
     setHasNavigated(true)
-  }
-
-  const variants = {
-    enter: (d: number) => ({ x: d > 0 ? 24 : -24, opacity: 0.0 }),
-    center: { x: 0, opacity: 1 },
-    exit: (d: number) => ({ x: d > 0 ? -16 : 16, opacity: 0 }),
-  }
+  }, [])
 
   return (
     <ToastProvider>
@@ -38,28 +48,27 @@ export function App() {
             style={{ position: 'absolute', inset: 0 }}
           >
             {route === 'login' && <LoginScreen onLogin={() => go('upload', 1)} />}
-            {route === 'upload' && <UploadScreen onDone={(_docs: any) => { Store.set({ documents: _docs }); go('home', 1) }} />}
+            {route === 'upload' && (
+              <UploadScreen onDone={(docs) => { Store.set({ documents: docs }); go('home', 1) }} />
+            )}
             {route === 'home' && <HomeScreen onRequestCredit={() => go('request', 1)} />}
             {route === 'request' && (
               <RequestScreen
                 onBack={() => go('home', -1)}
-                onSubmit={(p: any) => { setPendingPayload(p); go('analysis', 1) }}
+                onSubmit={(p) => { setPendingPayload(p); go('analysis', 1) }}
               />
             )}
-            {route === 'analysis' && (
+            {route === 'analysis' && pendingPayload && (
               <AnalysisScreen
                 payload={pendingPayload}
-                onDone={(decision: any, err: any) => {
-                  if (err || !decision) go('request', -1)
+                onDone={(decision, err) => {
+                  if (err || !decision || !decision.approved) go('request', -1)
                   else go('approved', 1)
                 }}
               />
             )}
-            {route === 'approved' && (
-              <ApprovedScreen
-                decision={Store.get().lastDecision}
-                onHome={() => go('home', -1)}
-              />
+            {route === 'approved' && lastDecision && (
+              <ApprovedScreen decision={lastDecision} onHome={() => go('home', -1)} />
             )}
           </motion.div>
         </AnimatePresence>

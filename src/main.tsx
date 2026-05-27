@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Buffer } from 'buffer'
 import './index.css'
 import { App } from './App'
-import { AppWalletProvider } from './providers/WalletProvider'
+import { AppWalletProvider } from '@/providers/WalletProvider'
 
-;(globalThis as any).Buffer = Buffer
+;(globalThis as { Buffer?: typeof Buffer }).Buffer = Buffer
 
 const queryClient = new QueryClient()
 

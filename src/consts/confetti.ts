@@ -1,0 +1,6 @@
+export const CONFETTI_DOT_COUNT = 48
+export const CONFETTI_PALETTE = ['#00C26E', '#0A0A0B', '#FFB400', '#00C26E', '#E5FAF0'] as const
+export const CONFETTI_DURATION_MS = 1800
+export const CONFETTI_DELAY_MAX_MS = 120
+
+export const PIX_NOTIFICATION_DURATION_MS = 4000
