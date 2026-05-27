@@ -1,27 +1,38 @@
 import { useCallback, useState } from 'react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, requestPayout, pollUntilConfirmed } from '@/lib/api'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed } from '@/lib/api'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
 import { generateConfettiDots, type ConfettiDot } from '@/utils/confetti'
 import { PIX_NOTIFICATION_DURATION_MS } from '@/consts/confetti'
 import type { LoanDecision, PayoutReceipt } from '@/types/domain'
 
-type ClaimPhase = 'approved' | 'claiming' | 'done'
+// DR-002 D4: 2-step UX (Q8 TL).
+//   approved  → release  → usdc_received  → sacando  → done
+//                ↑Step 1                     ↑Step 2
+type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done'
 
 interface UseApprovedScreenInput {
   decision: LoanDecision
 }
 
+interface ReleaseInfo {
+  cpfHashHex?: string
+  amountUSDC?: number
+  txRelease?: string
+}
+
 interface UseApprovedScreenOutput {
   phase: ClaimPhase
+  release: ReleaseInfo | null
   receipt: PayoutReceipt | null
   showReceipt: boolean
   setShowReceipt: (open: boolean) => void
   showNotif: boolean
   confetti: ConfettiDot[]
-  claim: () => Promise<void>
+  efetuar: () => Promise<void>           // Step 1: USDC on-chain
+  sacar: () => Promise<void>             // Step 2: Pix
 }
 
 async function executePayout(decision: LoanDecision, pixKey: string): Promise<PayoutReceipt> {
@@ -34,14 +45,35 @@ async function executePayout(decision: LoanDecision, pixKey: string): Promise<Pa
 
 export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseApprovedScreenOutput {
   const [phase, setPhase] = useState<ClaimPhase>('approved')
+  const [release, setRelease] = useState<ReleaseInfo | null>(null)
   const [receipt, setReceipt] = useState<PayoutReceipt | null>(null)
   const [showReceipt, setShowReceipt] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
   const [confetti, setConfetti] = useState<ConfettiDot[]>([])
   const toast = useToast()
 
-  const claim = useCallback(async () => {
-    setPhase('claiming')
+  // Step 1: chama Anchor `release_loan` via edge `request-payout?action=release`
+  // → USDC cai na wallet Solana do borrower (devnet).
+  const efetuar = useCallback(async () => {
+    setPhase('releasing')
+    try {
+      if (HAS_BACKEND && decision.loanId) {
+        const r = await releaseLoan(decision.loanId)
+        setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })
+      } else {
+        // Sem backend: simula USDC recebido instantâneo
+        setRelease({ amountUSDC: Math.round(decision.approvedAmountBRL * 1e6 / 5) })
+      }
+      setPhase('usdc_received')
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Falha ao efetuar empréstimo. Tente de novo.')
+      setPhase('approved')
+    }
+  }, [decision, toast])
+
+  // Step 2: chama edge `request-payout?action=payout` → Woovi PROD ou MOCK.
+  const sacar = useCallback(async () => {
+    setPhase('sacando')
     try {
       const r = await executePayout(decision, Store.get().wallet.pixKey)
       Store.set((s) => ({
@@ -75,9 +107,14 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       setPhase('done')
     } catch (e) {
       toast.push(e instanceof Error ? e.message : 'Pix demorou demais. Tente de novo.')
-      setPhase('approved')
+      setPhase('usdc_received')
     }
   }, [decision, toast])
 
-  return { phase, receipt, showReceipt, setShowReceipt, showNotif, confetti, claim }
+  return {
+    phase, release, receipt,
+    showReceipt, setShowReceipt,
+    showNotif, confetti,
+    efetuar, sacar,
+  }
 }

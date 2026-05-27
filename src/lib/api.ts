@@ -111,10 +111,28 @@ interface PayoutResponse {
   status: 'pending'
   correlationId: string
   amountBRL: number
+  mode?: 'prod' | 'mock'
 }
 
+interface ReleaseResponse {
+  step: 'release'
+  status: 'confirmed' | 'pending_anchor_deploy'
+  cpfHashHex?: string
+  amountUSDC?: number
+  txRelease?: string
+  score?: number
+}
+
+// Step 1 (DR-002 D5): admin assina Anchor `release_loan`, USDC cai na wallet Solana do borrower.
+export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
+  const r = await authedFetch('request-payout', { action: 'release', loanId })
+  if (!r.ok) throw new Error(`release-loan: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
+// Step 2 (DR-002 D5): off-ramp Woovi (PROD ou MOCK conforme env).
 export async function requestPayout(loanId: string, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutResponse> {
-  const r = await authedFetch('request-payout', { loanId, pixKey, pixKeyType })
+  const r = await authedFetch('request-payout', { action: 'payout', loanId, pixKey, pixKeyType })
   if (!r.ok) throw new Error(`request-payout: ${r.status} ${await r.text()}`)
   return r.json()
 }

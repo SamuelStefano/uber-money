@@ -27,7 +27,9 @@ export function ApprovedScreen({ decision, onHome }: ApprovedScreenProps) {
         <ApprovedHero
           decision={decision}
           phase={a.phase}
-          onClaim={a.claim}
+          release={a.release}
+          onEfetuar={a.efetuar}
+          onSacar={a.sacar}
           onShowReceipt={() => a.setShowReceipt(true)}
           onHome={onHome}
         />

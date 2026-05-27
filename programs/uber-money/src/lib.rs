@@ -1,9 +1,19 @@
-//! Uber Money — programa Anchor para escrow USDC + liberação de empréstimo.
+//! Uber Money — Anchor program (Hackanation 2026, devnet only).
 //!
-//! Program ID gerado em 26/05/2026. Pra regenerar:
+//! ⚠️  HACKATHON DEMO — DO NOT DEPLOY TO MAINNET WITHOUT:
+//!     - Multisig authority (Squads) replacing single-key admin
+//!     - Ed25519 score attestation on-chain (currently authority IS the score oracle)
+//!     - `borrower: Signer` via session key (currently AccountInfo, trusts admin)
+//!     - New program ID + rotated pepper for mainnet deploy
+//!
+//! Trust model (DR-002 §security):
+//! - authority (Tainan single-key) signs `release_loan` trusting score computed off-chain
+//! - borrower is AccountInfo, derived from JWT verified by edge admin
+//! - PDA seed = sha256(cpf || users.cpf_pepper) — pepper per-user in Supabase
+//!
+//! Program ID gerado 26/05/2026. Regenerate via:
 //!     solana-keygen new -o target/deploy/uber_money-keypair.json
-//!     anchor keys list   # copiar o pubkey gerado
-//! Depois atualizar `declare_id!()` + `Anchor.toml`. Rebuild obrigatório.
+//!     anchor keys list
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
@@ -11,8 +21,8 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 declare_id!("6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N");
 
 const SCORE_THRESHOLD: u16 = 600;
-// DR-001 D10: cap on-chain alinhado com PAYOUT_MAX_BRL=10. 10 USDC ≈ R$50 (margem 5x).
-// Backend cap (R$10) é o limite real; este é defense-in-depth on-chain.
+// DR-002 D11: on-chain cap = $10 USDC (defense-in-depth). Demo vault pre-fund = $20.
+// Backend cap (R$10) is the user-facing limit; this is the on-chain ceiling.
 const MAX_AMOUNT_USDC: u64 = 10_000_000;
 const VAULT_SEED: &[u8] = b"vault";
 const LOAN_SEED: &[u8] = b"loan";
@@ -28,33 +38,37 @@ pub mod uber_money {
         vault.token_account = ctx.accounts.vault_token_account.key();
         vault.bump = ctx.bumps.vault;
         vault.total_released = 0;
-        vault.total_repaid = 0;
         Ok(())
     }
 
-    /// Anti-double: PDA seed = [LOAN, borrower] (1 PDA por wallet).
-    /// `is_open` controla concorrência; histórico de empréstimos vive em eventos
-    /// (`LoanReleased`/`LoanRepaid`) indexados off-chain.
+    /// Anti-double: PDA seed = [LOAN, cpf_hash] enforces 1 loan per CPF (lifetime, on-chain).
+    /// `init` (not `init_if_needed`) → fails hard if PDA already exists (DR-002 D3).
+    /// Off-chain double-defense via UNIQUE constraint on loans.cpf_hash (migration 0005).
+    //
+    // SECURITY-DEBT: score is signed by admin authority only — no on-chain attestation
+    // from CRE. If authority key leaks, vault can be drained up to MAX_AMOUNT_USDC per
+    // distinct borrower. Mitigation: pre-fund $20 USDC + key rotation post-demo.
+    // Production: Ed25519 attestation via ed25519_program.
     pub fn release_loan(
         ctx: Context<ReleaseLoan>,
-        loan_id: u64,
+        cpf_hash: [u8; 32],
         amount: u64,
         score: u16,
     ) -> Result<()> {
         require!(score >= SCORE_THRESHOLD, UberError::ScoreTooLow);
         require!(amount > 0, UberError::InvalidAmount);
         require!(amount <= MAX_AMOUNT_USDC, UberError::AmountAboveCap);
-        require!(ctx.accounts.vault_token_account.amount >= amount, UberError::InsufficientVaultBalance);
+        require!(
+            ctx.accounts.vault_token_account.amount >= amount,
+            UberError::InsufficientVaultBalance
+        );
 
         let loan = &mut ctx.accounts.loan;
-        require!(!loan.is_open, UberError::LoanAlreadyOpen);
-
+        loan.cpf_hash = cpf_hash;
         loan.borrower = ctx.accounts.borrower.key();
-        loan.loan_id = loan_id;
         loan.amount = amount;
-        loan.score_at_release = score;
+        loan.score = score;
         loan.released_at = Clock::get()?.unix_timestamp;
-        loan.is_open = true;
         loan.bump = ctx.bumps.loan;
 
         let vault = &mut ctx.accounts.vault;
@@ -76,35 +90,82 @@ pub mod uber_money {
             amount,
         )?;
 
-        emit!(LoanReleased { borrower: loan.borrower, loan_id, amount, score, timestamp: loan.released_at });
+        emit!(LoanReleased {
+            borrower: loan.borrower,
+            cpf_hash,
+            amount,
+            score,
+            timestamp: loan.released_at,
+        });
         Ok(())
     }
 
-    pub fn repay_loan(ctx: Context<RepayLoan>, loan_id: u64, amount: u64) -> Result<()> {
+    /// DR-003 D1 — MOCK do `ccip_receive` real.
+    ///
+    /// Assinatura compatível com Chainlink CCIP `Any2SolanaMessage` payload:
+    /// `(cpf_hash, amount, score, source_chain_selector)`. Em produção, esta
+    /// instruction seria invocada via CPI pelo CCIP router program em Solana.
+    ///
+    /// No demo do hackathon, é chamada pelo authority (admin) direto — o
+    /// caminho CRE Sepolia → CCIP `ccipSend` é demonstrado por tx hash + `messageId`
+    /// real no explorer, mas o último hop é mockado por restrição de tempo.
+    ///
+    /// Comportamento idêntico ao `release_loan`. Tx separada pro Solana Explorer
+    /// torna o "caminho CCIP" auditável no pitch.
+    pub fn admin_disburse(
+        ctx: Context<ReleaseLoan>,
+        cpf_hash: [u8; 32],
+        amount: u64,
+        score: u16,
+        source_chain_selector: u64,
+    ) -> Result<()> {
+        // source_chain_selector documenta a origem CCIP (Sepolia = 16015286601757825753).
+        // No mock, só loga via msg!; em prod, validaria allowlist.
+        msg!("admin_disburse mock: source_chain_selector = {}", source_chain_selector);
+
+        require!(score >= SCORE_THRESHOLD, UberError::ScoreTooLow);
+        require!(amount > 0, UberError::InvalidAmount);
+        require!(amount <= MAX_AMOUNT_USDC, UberError::AmountAboveCap);
+        require!(
+            ctx.accounts.vault_token_account.amount >= amount,
+            UberError::InsufficientVaultBalance
+        );
+
         let loan = &mut ctx.accounts.loan;
-        require!(loan.is_open, UberError::LoanNotOpen);
-        require!(loan.loan_id == loan_id, UberError::LoanIdMismatch);
-        require!(amount >= loan.amount, UberError::UnderpaidLoan);
+        loan.cpf_hash = cpf_hash;
+        loan.borrower = ctx.accounts.borrower.key();
+        loan.amount = amount;
+        loan.score = score;
+        loan.released_at = Clock::get()?.unix_timestamp;
+        loan.bump = ctx.bumps.loan;
+
+        let vault = &mut ctx.accounts.vault;
+        vault.total_released = vault.total_released.checked_add(amount).unwrap();
+
+        let seeds = &[VAULT_SEED, &[vault.bump]];
+        let signer = &[&seeds[..]];
 
         token::transfer(
-            CpiContext::new(
+            CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.borrower_token_account.to_account_info(),
-                    to: ctx.accounts.vault_token_account.to_account_info(),
-                    authority: ctx.accounts.borrower.to_account_info(),
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    to: ctx.accounts.borrower_token_account.to_account_info(),
+                    authority: vault.to_account_info(),
                 },
+                signer,
             ),
             amount,
         )?;
 
-        loan.is_open = false;
-        loan.repaid_at = Clock::get()?.unix_timestamp;
-
-        let vault = &mut ctx.accounts.vault;
-        vault.total_repaid = vault.total_repaid.checked_add(amount).unwrap();
-
-        emit!(LoanRepaid { borrower: loan.borrower, loan_id, amount, timestamp: loan.repaid_at });
+        emit!(LoanDisbursedViaCcip {
+            borrower: loan.borrower,
+            cpf_hash,
+            amount,
+            score,
+            source_chain_selector,
+            timestamp: loan.released_at,
+        });
         Ok(())
     }
 }
@@ -113,10 +174,23 @@ pub mod uber_money {
 pub struct InitializeVault<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(init, payer = authority, space = 8 + Vault::SIZE, seeds = [VAULT_SEED], bump)]
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Vault::SIZE,
+        seeds = [VAULT_SEED],
+        bump
+    )]
     pub vault: Account<'info, Vault>,
     pub usdc_mint: Account<'info, Mint>,
-    #[account(init, payer = authority, token::mint = usdc_mint, token::authority = vault, seeds = [b"vault_token", vault.key().as_ref()], bump)]
+    #[account(
+        init,
+        payer = authority,
+        token::mint = usdc_mint,
+        token::authority = vault,
+        seeds = [b"vault_token", vault.key().as_ref()],
+        bump
+    )]
     pub vault_token_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -124,37 +198,33 @@ pub struct InitializeVault<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(loan_id: u64)]
+#[instruction(cpf_hash: [u8; 32])]
 pub struct ReleaseLoan<'info> {
     #[account(mut, has_one = authority)]
     pub vault: Account<'info, Vault>,
+    #[account(mut)]
     pub authority: Signer<'info>,
-    /// CHECK: borrower validated via loan PDA seeds
+    /// CHECK: borrower passed by admin edge, vinculated to verified JWT.
+    /// See SECURITY-DEBT in `release_loan` doc.
     pub borrower: AccountInfo<'info>,
-    #[account(init_if_needed, payer = authority, space = 8 + Loan::SIZE, seeds = [LOAN_SEED, borrower.key().as_ref()], bump)]
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Loan::SIZE,
+        seeds = [LOAN_SEED, cpf_hash.as_ref()],
+        bump
+    )]
     pub loan: Account<'info, Loan>,
     #[account(mut, address = vault.token_account)]
     pub vault_token_account: Account<'info, TokenAccount>,
-    #[account(mut, token::mint = vault.usdc_mint, token::authority = borrower)]
+    #[account(
+        mut,
+        token::mint = vault.usdc_mint,
+        token::authority = borrower
+    )]
     pub borrower_token_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-#[instruction(loan_id: u64)]
-pub struct RepayLoan<'info> {
-    #[account(mut)]
-    pub vault: Account<'info, Vault>,
-    #[account(mut, seeds = [LOAN_SEED, borrower.key().as_ref()], bump = loan.bump, has_one = borrower)]
-    pub loan: Account<'info, Loan>,
-    #[account(mut)]
-    pub borrower: Signer<'info>,
-    #[account(mut, address = vault.token_account)]
-    pub vault_token_account: Account<'info, TokenAccount>,
-    #[account(mut, token::mint = vault.usdc_mint, token::authority = borrower)]
-    pub borrower_token_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
 }
 
 #[account]
@@ -163,35 +233,52 @@ pub struct Vault {
     pub usdc_mint: Pubkey,
     pub token_account: Pubkey,
     pub total_released: u64,
-    pub total_repaid: u64,
     pub bump: u8,
 }
-impl Vault { pub const SIZE: usize = 32 + 32 + 32 + 8 + 8 + 1; }
+impl Vault {
+    pub const SIZE: usize = 32 + 32 + 32 + 8 + 1;
+}
 
 #[account]
 pub struct Loan {
+    pub cpf_hash: [u8; 32],
     pub borrower: Pubkey,
-    pub loan_id: u64,
     pub amount: u64,
-    pub score_at_release: u16,
+    pub score: u16,
     pub released_at: i64,
-    pub repaid_at: i64,
-    pub is_open: bool,
     pub bump: u8,
 }
-impl Loan { pub const SIZE: usize = 32 + 8 + 8 + 2 + 8 + 8 + 1 + 1; }
+impl Loan {
+    pub const SIZE: usize = 32 + 32 + 8 + 2 + 8 + 1;
+}
 
-#[event] pub struct LoanReleased { pub borrower: Pubkey, pub loan_id: u64, pub amount: u64, pub score: u16, pub timestamp: i64 }
-#[event] pub struct LoanRepaid   { pub borrower: Pubkey, pub loan_id: u64, pub amount: u64, pub timestamp: i64 }
+#[event]
+pub struct LoanReleased {
+    pub borrower: Pubkey,
+    pub cpf_hash: [u8; 32],
+    pub amount: u64,
+    pub score: u16,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct LoanDisbursedViaCcip {
+    pub borrower: Pubkey,
+    pub cpf_hash: [u8; 32],
+    pub amount: u64,
+    pub score: u16,
+    pub source_chain_selector: u64,
+    pub timestamp: i64,
+}
 
 #[error_code]
 pub enum UberError {
-    #[msg("Score below threshold (min 600/1000)")] ScoreTooLow,
-    #[msg("Invalid amount")] InvalidAmount,
-    #[msg("Amount above on-chain cap")] AmountAboveCap,
-    #[msg("Insufficient vault balance")] InsufficientVaultBalance,
-    #[msg("Borrower already has an open loan")] LoanAlreadyOpen,
-    #[msg("No open loan to repay")] LoanNotOpen,
-    #[msg("Loan id mismatch")] LoanIdMismatch,
-    #[msg("Repayment below principal")] UnderpaidLoan,
+    #[msg("Score below threshold (min 600/1000)")]
+    ScoreTooLow,
+    #[msg("Invalid amount")]
+    InvalidAmount,
+    #[msg("Amount above on-chain cap")]
+    AmountAboveCap,
+    #[msg("Insufficient vault balance")]
+    InsufficientVaultBalance,
 }

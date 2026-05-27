@@ -1,15 +1,24 @@
-// request-payout — chama Woovi /api/v1/transfer com Bearer auth + payload no shape correto.
-// Ref: openpix.com.br (Woovi white-label). Endpoint exato vai variar; ajustar conforme doc real.
+// request-payout — dispatcher pra 2 steps (DR-002 D5):
+//   action='release' (Step 1) → admin assina Anchor release_loan, USDC cai na wallet do borrower
+//   action='payout'  (Step 2) → Woovi PROD ou MOCK (WOOVI_MODE) → Pix cai
+// 1 edge fn com 2 handlers internos (não 2 fns deployadas — A6 amend).
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3'
 import { json, handleOptions } from '../_shared/cors.ts'
+import { releaseLoan as anchorReleaseLoan } from '../_shared/anchor-signer.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY')!
+const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
 const WOOVI_BASE = Deno.env.get('WOOVI_API_URL') ?? 'https://api.openpix.com.br/api/v1'
+const WOOVI_MODE = (Deno.env.get('WOOVI_MODE') ?? 'mock').toLowerCase() // 'prod' | 'mock'
 const MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10')
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
+
+type ReleaseBody = { action: 'release'; loanId: string }
+type PayoutBody  = { action: 'payout';  loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
+type Body = ReleaseBody | PayoutBody
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return handleOptions(req)
@@ -18,9 +27,91 @@ serve(async (req) => {
   const { data: { user }, error: authErr } = await admin.auth.getUser(authHeader.replace('Bearer ', ''))
   if (authErr || !user) return json({ error: 'Unauthorized' }, 401, req)
 
-  let body: { loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
+  let body: Body
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
-  if (!body.loanId || !body.pixKey || !body.pixKeyType) return json({ error: 'loanId, pixKey, pixKeyType required' }, 400, req)
+
+  switch (body.action) {
+    case 'release': return handleRelease(req, admin, user.id, body)
+    case 'payout':  return handlePayout(req, admin, user.id, body)
+    default:        return json({ error: 'Invalid action — expected "release" or "payout"' }, 400, req)
+  }
+})
+
+// ─── Step 1: Anchor release_loan (USDC devnet → borrower) ───────────────────
+async function handleRelease(req: Request, admin: SupabaseClient, userId: string, body: ReleaseBody) {
+  if (!body.loanId) return json({ error: 'loanId required' }, 400, req)
+
+  const { data: loan, error: loanErr } = await admin
+    .from('loans')
+    .select('id, status, principal_brl, tx_release, request_id, loan_requests!inner(user_id, score)')
+    .eq('id', body.loanId)
+    .maybeSingle()
+  if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
+  if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
+  if (loan.tx_release) return json({ error: 'Loan already released', txRelease: loan.tx_release }, 409, req)
+
+  // Read user CPF (from CNH OCR) + pepper
+  const { data: cnh } = await admin
+    .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
+  const cpfRaw = ((cnh?.ocr_data as any)?.cpf ?? '').replace(/\D/g, '')
+  if (!cpfRaw || cpfRaw.length !== 11) return json({ error: 'CPF not extracted from CNH' }, 400, req)
+
+  const { data: userRow } = await admin.from('users').select('cpf_pepper, wallet').eq('id', userId).maybeSingle()
+  const pepper: ArrayBuffer | null = userRow?.cpf_pepper ? hexToBuffer(userRow.cpf_pepper as string) : null
+  if (!pepper) return json({ error: 'User pepper not initialized' }, 500, req)
+
+  const cpfHash = await sha256Concat(new TextEncoder().encode(cpfRaw), new Uint8Array(pepper))
+  const cpfHashHex = '\\x' + bufferToHex(cpfHash)
+
+  // DR-003 D7: chama Anchor release_loan via admin signer server-side.
+  const amountUSDC = BigInt(Math.round(Math.min(Number(loan.principal_brl), MAX_BRL) * 1e6 / 5)) // mock cotação 1 USDC = R$5
+  const score = Number((loan as any).loan_requests.score ?? 0)
+
+  await admin.from('loans').update({ cpf_hash: cpfHashHex }).eq('id', loan.id)
+  await admin.from('loan_requests').update({ cpf_hash: cpfHashHex }).eq('id', loan.request_id)
+
+  const { data: userRow2 } = await admin.from('users').select('wallet').eq('id', userId).maybeSingle()
+  if (!userRow2?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
+
+  try {
+    const txSig = await anchorReleaseLoan({
+      cpfHash,
+      amount: amountUSDC,
+      score,
+      borrower: new PublicKey(userRow2.wallet),
+    })
+    await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
+    return json({
+      step: 'release',
+      status: 'confirmed',
+      cpfHashHex,
+      amountUSDC: Number(amountUSDC),
+      score,
+      txRelease: txSig,
+      explorer: `https://explorer.solana.com/tx/${txSig}?cluster=devnet`,
+    }, 200, req)
+  } catch (e) {
+    // Se Anchor não está deployado ainda OU keypair faltando, retorna pending pra front mostrar fallback.
+    const errMsg = e instanceof Error ? e.message : String(e)
+    if (errMsg.includes('SOLANA_ADMIN_KEYPAIR_JSON') || errMsg.includes('Vault account not found')) {
+      return json({
+        step: 'release',
+        status: 'pending_anchor_deploy',
+        cpfHashHex,
+        amountUSDC: Number(amountUSDC),
+        score,
+        note: errMsg,
+      }, 202, req)
+    }
+    return json({ error: 'release_loan failed', details: errMsg }, 502, req)
+  }
+}
+
+// ─── Step 2: Woovi Pix payout (PROD ou MOCK) ────────────────────────────────
+async function handlePayout(req: Request, admin: SupabaseClient, userId: string, body: PayoutBody) {
+  if (!body.loanId || !body.pixKey || !body.pixKeyType) {
+    return json({ error: 'loanId, pixKey, pixKeyType required' }, 400, req)
+  }
 
   const { data: loan, error: loanErr } = await admin
     .from('loans')
@@ -28,12 +119,11 @@ serve(async (req) => {
     .eq('id', body.loanId)
     .maybeSingle()
   if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
-  if ((loan as any).loan_requests.user_id !== user.id) return json({ error: 'Forbidden' }, 403, req)
+  if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: 'Loan not open' }, 400, req)
 
-  // pixKey ↔ CPF do OCR (DR-001 D6 — anti CNH-roubada fluindo Pix pra outra wallet).
+  // pixKey ↔ CPF do OCR (DR-001 D6 — anti CNH-roubada).
   if (body.pixKeyType === 'cpf') {
-    const userId = (loan as any).loan_requests.user_id
     const { data: cnhDoc } = await admin
       .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
     const ocrCpf = (cnhDoc?.ocr_data as any)?.cpf
@@ -46,7 +136,6 @@ serve(async (req) => {
   const amountBRL = Math.min(Number(loan.principal_brl), MAX_BRL)
   const amountCents = Math.round(amountBRL * 100)
 
-  // Idempotency: INCLUI pending — anti double-pay (review HIGH-4)
   const { data: existing } = await admin
     .from('payouts')
     .select('id, status')
@@ -69,8 +158,25 @@ serve(async (req) => {
     .single()
   if (payoutErr) return json({ error: payoutErr.message }, 500, req)
 
-  // DR-001 D5-b: sandbox usa /charge (QR cobrança). Em prod com permissão de payout
-  // liberada, trocar pra /transfer (shape diferente — ver doc Woovi).
+  // DR-002 D8: mock fallback obrigatório pra demo presencial.
+  if (WOOVI_MODE !== 'prod') {
+    // Simula confirmação após 8s via setTimeout? Não — edge fn pode ser killed.
+    // Em vez disso: marca pending agora, front faz polling; webhook MOCK separado seta confirmed em 8s.
+    setTimeout(async () => {
+      try {
+        await admin.from('payouts').update({
+          status: 'confirmed',
+          woovi_payload: { mocked: true, correlationId, paidAt: new Date().toISOString() },
+        }).eq('id', payout.id)
+      } catch (e) { console.error('[mock] update failed', e) }
+    }, 8000)
+    return json({
+      payoutId: payout.id, status: 'pending', correlationId, amountBRL,
+      mode: 'mock', note: 'Confirmed in ~8s via mock background update.',
+    }, 200, req)
+  }
+
+  // PROD: Woovi real
   try {
     const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
       method: 'POST',
@@ -93,9 +199,25 @@ serve(async (req) => {
     }
 
     await admin.from('payouts').update({ woovi_payload: wooviData }).eq('id', payout.id)
-    return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, sandboxMode: 'charge' }, 200, req)
+    return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, mode: 'prod' }, 200, req)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
     return json({ error: 'Network error', details: String(e) }, 502, req)
   }
-})
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+async function sha256Concat(a: Uint8Array, b: Uint8Array): Promise<Uint8Array> {
+  const buf = new Uint8Array(a.length + b.length)
+  buf.set(a, 0); buf.set(b, a.length)
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', buf))
+}
+function bufferToHex(buf: Uint8Array): string {
+  return Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+function hexToBuffer(hex: string): ArrayBuffer {
+  const clean = hex.startsWith('\\x') ? hex.slice(2) : hex
+  const out = new Uint8Array(clean.length / 2)
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16)
+  return out.buffer
+}
