@@ -1,7 +1,7 @@
 // woovi-webhook — fail-closed HMAC + handle sha256= prefix + idempotent update.
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { json, handleOptions } from '../_shared/cors.ts'
+import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -48,11 +48,14 @@ serve(async (req) => {
   const failed = wooviStatus && /FAILED|ERROR|DENIED|REJECTED/i.test(wooviStatus)
   const localStatus = completed ? 'confirmed' : failed ? 'failed' : 'pending'
 
+  // DR-001 / A4 CRIT-2: COMPLETED depois de FAILED é cenário real (sandbox flakey) — aceitar.
+  // FAILED só atualiza se ainda pending. CONFIRMED nunca volta atrás.
+  const allowedFromStatuses = localStatus === 'confirmed' ? ['pending', 'failed'] : ['pending']
   const { data: updated, error: updErr } = await admin
     .from('payouts')
     .update({ status: localStatus, endtoend_id: endToEndId ?? null, woovi_payload: payload })
     .eq('woovi_correlation_id', correlationId)
-    .eq('status', 'pending')
+    .in('status', allowedFromStatuses)
     .select('id, loan_id, kind')
     .maybeSingle()
 

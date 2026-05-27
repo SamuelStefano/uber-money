@@ -64,8 +64,18 @@ export async function processDocument(kind: DocKind, imageBase64: string, mediaT
 }
 
 // ─── Loan flow ──────────────────────────────────────────────────
+// DR-001 D3: mapeia IDs do front (pneu/combustivel/...) pro enum loan_reason do backend.
+const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {
+  pneu: 'vehicle_repair',
+  combustivel: 'fuel',
+  manutencao: 'vehicle_repair',
+  outro: 'other',
+  emergencia: 'emergency',
+}
+
 export async function requestLoan(amountBRL: number, reason: string) {
-  const r = await authedFetch('request-loan', { amountBRL, reason })
+  const mapped = REASON_MAP[reason] ?? 'other'
+  const r = await authedFetch('request-loan', { amountBRL, reason: mapped })
   if (!r.ok) throw new Error(`request-loan: ${r.status} ${await r.text()}`)
   return r.json()
 }

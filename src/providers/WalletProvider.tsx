@@ -5,7 +5,11 @@ import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adap
 import { clusterApiUrl } from '@solana/web3.js'
 
 export function AppWalletProvider({ children }: { children: ReactNode }) {
-  const endpoint = useMemo(() => clusterApiUrl('devnet'), [])
+  // DR-001 D12: RPC alternativo (Helius/QuickNode) via env evita rate-limit do RPC público.
+  const endpoint = useMemo(
+    () => (import.meta.env.VITE_SOLANA_RPC as string | undefined) || clusterApiUrl('devnet'),
+    [],
+  )
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], [])
   return (
     <ConnectionProvider endpoint={endpoint}>

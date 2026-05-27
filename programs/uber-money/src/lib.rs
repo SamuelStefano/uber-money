@@ -11,9 +11,9 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 declare_id!("6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N");
 
 const SCORE_THRESHOLD: u16 = 600;
-// Hard cap por transação no escrow (sandbox = 100 USDC com 6 decimals = R$ ~500 demo).
-// Backend (Edge Function) cap real em R$ 10 (Pix); este é o cinto-e-suspensório on-chain.
-const MAX_AMOUNT_USDC: u64 = 100_000_000;
+// DR-001 D10: cap on-chain alinhado com PAYOUT_MAX_BRL=10. 10 USDC ≈ R$50 (margem 5x).
+// Backend cap (R$10) é o limite real; este é defense-in-depth on-chain.
+const MAX_AMOUNT_USDC: u64 = 10_000_000;
 const VAULT_SEED: &[u8] = b"vault";
 const LOAN_SEED: &[u8] = b"loan";
 
