@@ -1,6 +1,7 @@
 // api.ts — cliente real do backend (Supabase Edge Functions).
-// Em dev sem env: usa mocks de services.ts. Em prod: hits reais com JWT.
+// Em dev sem env: usa mocks de lib/mock.ts. Em prod: hits reais com JWT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -73,17 +74,138 @@ const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'othe
   emergencia: 'emergency',
 }
 
-export async function requestLoan(amountBRL: number, reason: string) {
+interface LoanRequestResponse {
+  approved: boolean
+  score: number
+  approvedAmountBRL: number
+  limit_brl: number
+  interestPct: number
+  installments: number
+  dueDate: string | null
+  loanId: string | null
+  requestId: string
+}
+
+export async function requestLoan(amountBRL: number, reason: string): Promise<LoanDecision> {
   const mapped = REASON_MAP[reason] ?? 'other'
   const r = await authedFetch('request-loan', { amountBRL, reason: mapped })
   if (!r.ok) throw new Error(`request-loan: ${r.status} ${await r.text()}`)
-  return r.json()
+  const data: LoanRequestResponse = await r.json()
+  return {
+    approved: data.approved,
+    score: data.score,
+    approvedAmountBRL: data.approvedAmountBRL,
+    installments: data.installments,
+    interestPct: data.interestPct,
+    dueDate: data.dueDate ?? new Date().toISOString(),
+    loanId: data.loanId ?? '',
+    requestId: data.requestId,
+    limit_brl: data.limit_brl,
+  }
 }
 
-export async function requestPayout(loanId: string, pixKey: string, pixKeyType: 'cpf' | 'email' | 'phone' | 'evp') {
+export type PixKeyType = 'cpf' | 'email' | 'phone' | 'evp'
+
+interface PayoutResponse {
+  payoutId: string
+  status: 'pending'
+  correlationId: string
+  amountBRL: number
+}
+
+export async function requestPayout(loanId: string, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutResponse> {
   const r = await authedFetch('request-payout', { loanId, pixKey, pixKeyType })
   if (!r.ok) throw new Error(`request-payout: ${r.status} ${await r.text()}`)
   return r.json()
+}
+
+// ─── Histórico do user (lido direto via RLS — service_role bypass não usado) ────
+interface LoanRow {
+  id: string
+  principal_brl: number
+  interest_pct: number
+  due_date: string
+  status: string
+  created_at: string
+  request_id: string
+}
+
+interface PayoutRow {
+  id: string
+  amount_brl: number
+  status: string
+  pix_key: string
+  created_at: string
+  endtoend_id: string | null
+  loan_id: string
+}
+
+export async function getUserActivity(): Promise<ActivityItem[]> {
+  const sb = supabase()
+  const [{ data: loans }, { data: payouts }] = await Promise.all([
+    sb.from('loans').select('id, principal_brl, interest_pct, due_date, status, created_at, request_id').order('created_at', { ascending: false }).limit(20),
+    sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'release').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
+  ])
+  const items: ActivityItem[] = []
+  for (const p of (payouts as PayoutRow[] | null) ?? []) {
+    items.push({
+      id: p.id,
+      kind: 'pix',
+      amountBRL: Number(p.amount_brl),
+      label: 'Pix recebido',
+      sub: `Empréstimo ${p.loan_id.slice(0, 8)} · ${p.pix_key}`,
+      timestamp: p.created_at,
+    })
+  }
+  for (const l of (loans as LoanRow[] | null) ?? []) {
+    items.push({
+      id: l.id,
+      kind: 'loan',
+      amountBRL: Number(l.principal_brl),
+      label: 'Empréstimo aberto',
+      sub: `${(Number(l.interest_pct) * 100).toFixed(1)}%/mês · vence ${new Date(l.due_date).toLocaleDateString('pt-BR')}`,
+      timestamp: l.created_at,
+    })
+  }
+  items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  return items
+}
+
+interface PayoutStatusRow {
+  status: 'pending' | 'confirmed' | 'failed'
+  endtoend_id: string | null
+  amount_brl: number
+  created_at: string
+  pix_key: string
+}
+
+export async function getPayoutStatus(payoutId: string): Promise<PayoutStatusRow | null> {
+  const { data } = await supabase()
+    .from('payouts')
+    .select('status, endtoend_id, amount_brl, created_at, pix_key')
+    .eq('id', payoutId)
+    .maybeSingle()
+  return (data as PayoutStatusRow | null) ?? null
+}
+
+export async function pollUntilConfirmed(payoutId: string, opts: { intervalMs?: number; timeoutMs?: number } = {}): Promise<PayoutReceipt> {
+  const interval = opts.intervalMs ?? 2000
+  const timeout = opts.timeoutMs ?? 60_000
+  const start = Date.now()
+  while (Date.now() - start < timeout) {
+    const row = await getPayoutStatus(payoutId)
+    if (row?.status === 'confirmed') {
+      return {
+        id: row.endtoend_id ?? payoutId,
+        amountBRL: Number(row.amount_brl),
+        timestamp: row.created_at,
+        to: row.pix_key,
+      }
+    }
+    if (row?.status === 'failed') throw new Error('Pix recusado pelo Woovi')
+    await new Promise((r) => setTimeout(r, interval))
+  }
+  throw new Error('Timeout aguardando confirmação do Pix')
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

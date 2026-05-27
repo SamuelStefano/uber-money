@@ -1,17 +1,20 @@
 import { ActivityRow } from '@/components/molecules/activity-row'
-import type { ActivityItem } from '@/types/domain'
+import { useUserHistory } from '@/hooks/use-user-history'
 
-interface ActivityListProps {
-  items: ActivityItem[]
-}
+export function ActivityList() {
+  const { items, loading, error } = useUserHistory()
+  const showEmpty = !loading && items.length === 0
 
-export function ActivityList({ items }: ActivityListProps) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: 'var(--mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
-        Atividade
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: 'var(--mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Atividade
+        </div>
+        {loading && <span style={{ fontSize: 11, color: 'var(--mute-2)' }}>carregando…</span>}
+        {error && <span style={{ fontSize: 11, color: '#C0392B' }}>erro ao carregar</span>}
       </div>
-      {items.length === 0 ? (
+      {showEmpty ? (
         <div style={{
           padding: '40px 24px', textAlign: 'center',
           color: 'var(--mute-2)', fontSize: 14, fontWeight: 500,

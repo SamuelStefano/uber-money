@@ -31,7 +31,7 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
           </div>
 
           <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
-          <ActivityList items={s.activity} />
+          <ActivityList />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>

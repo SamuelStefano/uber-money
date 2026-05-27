@@ -120,7 +120,7 @@ Badge volta SÓ quando `loans.tx_release IS NOT NULL` e validável via Solana Ex
 
 ### ✅ D13 — Resposta Q&A pré-escrita "como motorista comum usa?"
 **Votos:** 10 RATIFY
-**Consenso:** Documento em `.sdd/uber-money/pitch-qa.md`: "v1 wallet-only é dev-friendly; v2 tem embedded wallet via Privy/Magic.link". Segunda resposta pra "e se Phantom cair no dia?" → "vídeo plano-B existe (D7)". Não implementar embedded agora.
+**Consenso:** Documento em `.sdd/uber-money/pitch-qa.md`. ATUALIZADO 27/05: Privy/Magic.link DROPADOS — "daria mais trabalho que ajudaria" (Samuel). Resposta pra "como motorista comum usa?" vira "wallet-only é proposital: zero email/dados, só assinatura. Roadmap v2 pode incluir custódia simplificada, mas hoje a tese é cripto-native real." Resposta pra "Phantom cair?" → "vídeo plano-B existe (D7)".
 
 ---
 
@@ -140,7 +140,7 @@ Aceitar como **observações pós-vote**. Backlog pós-hackathon a menos que ind
 
 1. **CRE obrigatório ou não?** Resolução: leitura edital TAIKAI **HOJE até 23h** (gate D1 vs D1-alt).
 2. **Cred Woovi `/transfer`** liberada? Deadline 27/05 12h (gate D5-a vs D5-b).
-3. **Embedded wallet** (Privy/Magic): só Q&A escrito (D13), implementação no v2.
+3. ~~**Embedded wallet** (Privy/Magic): só Q&A escrito (D13), implementação no v2.~~ **DROPADO 27/05** — wallet-only continua, sem fallback custodial.
 
 ---
 

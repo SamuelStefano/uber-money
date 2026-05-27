@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
+import { HAS_BACKEND, requestPayout, pollUntilConfirmed } from '@/lib/api'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
 import { generateConfettiDots, type ConfettiDot } from '@/utils/confetti'
@@ -23,6 +24,14 @@ interface UseApprovedScreenOutput {
   claim: () => Promise<void>
 }
 
+async function executePayout(decision: LoanDecision, pixKey: string): Promise<PayoutReceipt> {
+  if (HAS_BACKEND && decision.loanId) {
+    const { payoutId } = await requestPayout(decision.loanId, pixKey, 'email')
+    return pollUntilConfirmed(payoutId)
+  }
+  return sendPixMock({ amountBRL: decision.approvedAmountBRL, to: pixKey })
+}
+
 export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseApprovedScreenOutput {
   const [phase, setPhase] = useState<ClaimPhase>('approved')
   const [receipt, setReceipt] = useState<PayoutReceipt | null>(null)
@@ -34,10 +43,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
   const claim = useCallback(async () => {
     setPhase('claiming')
     try {
-      const r = await sendPixMock({
-        amountBRL: decision.approvedAmountBRL,
-        to: Store.get().wallet.pixKey,
-      })
+      const r = await executePayout(decision, Store.get().wallet.pixKey)
       Store.set((s) => ({
         ...s,
         wallet: { ...s.wallet, balanceBRL: s.wallet.balanceBRL + decision.approvedAmountBRL },
@@ -47,7 +53,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
             kind: 'pix',
             amountBRL: decision.approvedAmountBRL,
             label: 'Pix recebido',
-            sub: `Empréstimo ${decision.loanId} · agora`,
+            sub: `Empréstimo ${decision.loanId.slice(0, 8)} · agora`,
             timestamp: r.timestamp,
           },
           {
@@ -67,8 +73,8 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       setConfetti(generateConfettiDots())
       setTimeout(() => setShowNotif(false), PIX_NOTIFICATION_DURATION_MS)
       setPhase('done')
-    } catch {
-      toast.push('Pix demorou demais. Tente de novo.')
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : 'Pix demorou demais. Tente de novo.')
       setPhase('approved')
     }
   }, [decision, toast])

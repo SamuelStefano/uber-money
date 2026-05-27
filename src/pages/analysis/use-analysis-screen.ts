@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { requestCreditMock } from '@/lib/mock'
+import { HAS_BACKEND, requestLoan } from '@/lib/api'
 import { Store } from '@/store'
 import {
   ANALYSIS_DONE_DELAY_MS,
@@ -16,6 +17,11 @@ interface UseAnalysisScreenInput {
   onDone: (decision: LoanDecision | null, err?: boolean) => void
 }
 
+async function fetchDecision(payload: LoanRequestPayload): Promise<LoanDecision> {
+  if (HAS_BACKEND) return requestLoan(payload.amountBRL, payload.reason)
+  return requestCreditMock(payload)
+}
+
 export function useAnalysisScreen({ payload, onDone }: UseAnalysisScreenInput): { step: number } {
   const [step, setStep] = useState(0)
   const toast = useToast()
@@ -26,15 +32,15 @@ export function useAnalysisScreen({ payload, onDone }: UseAnalysisScreenInput): 
       setStep((s) => Math.min(ANALYSIS_STEPS.length - 1, s + 1))
     }, ANALYSIS_STEP_MS)
 
-    requestCreditMock(payload)
+    fetchDecision(payload)
       .then((decision) => {
         if (!mounted) return
         Store.set({ lastDecision: decision })
         setTimeout(() => { if (mounted) onDone(decision) }, ANALYSIS_DONE_DELAY_MS)
       })
-      .catch(() => {
+      .catch((e) => {
         if (!mounted) return
-        toast.push('Conexão instável. Tentando de novo…')
+        toast.push(e instanceof Error ? e.message : 'Conexão instável. Tente de novo.')
         setTimeout(() => { if (mounted) onDone(null, true) }, ANALYSIS_ERROR_DELAY_MS)
       })
 
