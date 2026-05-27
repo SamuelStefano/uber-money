@@ -121,6 +121,15 @@ supabase/
     DR-003-v9-mock-honest.md
 ```
 
+## Caps de segurança (defense-in-depth)
+| Camada | Cap | Onde |
+|---|---|---|
+| User-facing | **R$ 10 por payout** | `PAYOUT_MAX_BRL` env nas edges `request-loan` + `request-payout` |
+| On-chain ceiling | **10 USDC** (≈ R$ 50) | `MAX_AMOUNT_USDC` em `lib.rs:18` |
+| Vault pre-fund (demo) | **20 USDC** | manual transfer Phantom → vault token account |
+
+User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypassed (ex: admin keypair comprometida).
+
 ## Decisões trancadas (plan v9 Tainan TG 6554, 27/05 12:25Z)
 - **Q5** Hash CPF on-chain. PDA `[loan, sha256(cpf)]` — refinado pra pepper per-user em DR-002 (`users.cpf_pepper` random 32B no signup, vault Supabase only).
 - **Q8** Pix flow 2 steps: Efetuar (`release_loan` Anchor) + Sacar (Woovi pix-out).

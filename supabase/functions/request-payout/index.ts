@@ -48,7 +48,16 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
     .maybeSingle()
   if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
   if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
-  if (loan.tx_release) return json({ error: 'Loan already released', txRelease: loan.tx_release }, 409, req)
+  // Squad A3 amend: idempotência via 200 + status enum (não 409 + string match).
+  // Front consome `status === 'already_released'` como sucesso natural.
+  if (loan.tx_release) {
+    return json({
+      step: 'release',
+      status: 'already_released',
+      txRelease: loan.tx_release,
+      explorer: `https://explorer.solana.com/tx/${loan.tx_release}?cluster=devnet`,
+    }, 200, req)
+  }
 
   // Read user CPF (from CNH OCR) + pepper
   const { data: cnh } = await admin
@@ -80,7 +89,9 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
       score,
       borrower: new PublicKey(userRow2.wallet),
     })
-    await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
+    // HIGH-1 fix: log se update falhar — tx Solana já confirmou, perder ref aqui = drift on-chain vs DB.
+    const { error: updErr } = await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
+    if (updErr) console.error('[release] CRITICAL: tx_release update failed after on-chain success', { txSig, loanId: loan.id, err: updErr.message })
     return json({
       step: 'release',
       status: 'confirmed',

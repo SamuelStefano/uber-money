@@ -14,6 +14,7 @@ import {
 import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddress,
+  createAssociatedTokenAccountIdempotentInstruction,
 } from 'https://esm.sh/@solana/spl-token@0.4.8'
 
 const PROGRAM_ID = new PublicKey(Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N')
@@ -100,6 +101,14 @@ export async function releaseLoan(args: ReleaseLoanArgs): Promise<string> {
   const vaultState = await fetchVaultState(conn, vault)
   const borrowerAta = await getAssociatedTokenAddress(USDC_MINT, args.borrower)
 
+  // CRIT-3 fix (squad A2 amend): idempotent ATA create.
+  // - Sem getAccountInfo (1 RPC a menos)
+  // - Sem race condition (idempotent = no-op se ATA existe entre check & send)
+  // - Admin paga rent (~0.002 SOL) só quando precisa criar
+  const ataPreIx = createAssociatedTokenAccountIdempotentInstruction(
+    admin.publicKey, borrowerAta, args.borrower, USDC_MINT,
+  )
+
   const disc = await methodDiscriminator('release_loan')
   const data = new Uint8Array(disc.length + 32 + 8 + 2)
   data.set(disc, 0)
@@ -122,7 +131,7 @@ export async function releaseLoan(args: ReleaseLoanArgs): Promise<string> {
     data,
   })
 
-  const tx = new Transaction().add(ix)
+  const tx = new Transaction().add(ataPreIx).add(ix)
   tx.feePayer = admin.publicKey
   tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
   tx.sign(admin)

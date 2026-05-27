@@ -116,10 +116,11 @@ interface PayoutResponse {
 
 interface ReleaseResponse {
   step: 'release'
-  status: 'confirmed' | 'pending_anchor_deploy'
+  status: 'confirmed' | 'already_released' | 'pending_anchor_deploy'
   cpfHashHex?: string
   amountUSDC?: number
   txRelease?: string
+  explorer?: string
   score?: number
 }
 

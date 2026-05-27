@@ -30,6 +30,11 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
   // dispara novo signMessage → popup Phantom em loop.
   const signedForPubkeyRef = useRef<string | null>(null)
 
+  // CRIT-1 fix: reset guard quando user desconecta — permite reconectar a mesma wallet.
+  useEffect(() => {
+    if (!wallet.connected) signedForPubkeyRef.current = null
+  }, [wallet.connected])
+
   useEffect(() => {
     if (!wallet.connected || !wallet.publicKey) return
     const address = wallet.publicKey.toBase58()
@@ -64,7 +69,9 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
         Store.set({ user })
         setWaiting(false)
         onLogin()
-      } catch {
+      } catch (e) {
+        // Dev visibility: detalhes do erro de auth ajudam diagnose sem expor pro user.
+        console.error('[login] auth flow failed:', e)
         signedForPubkeyRef.current = null  // libera retry se falhou
         toast.push('Falha na autenticação. Tente reconectar.')
         setWaiting(false)
