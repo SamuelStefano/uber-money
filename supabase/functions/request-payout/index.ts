@@ -80,7 +80,9 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
       score,
       borrower: new PublicKey(userRow2.wallet),
     })
-    await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
+    // HIGH-1 fix: log se update falhar — tx Solana já confirmou, perder ref aqui = drift on-chain vs DB.
+    const { error: updErr } = await admin.from('loans').update({ tx_release: txSig }).eq('id', loan.id)
+    if (updErr) console.error('[release] CRITICAL: tx_release update failed after on-chain success', { txSig, loanId: loan.id, err: updErr.message })
     return json({
       step: 'release',
       status: 'confirmed',

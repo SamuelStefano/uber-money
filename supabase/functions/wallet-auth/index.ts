@@ -11,7 +11,9 @@ import { json, handleOptions } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const JWT_SECRET = Deno.env.get('WALLET_JWT_SECRET') ?? Deno.env.get('SUPABASE_JWT_SECRET')
+// Supabase bloqueia secrets com prefixo SUPABASE_*, daí usamos WALLET_JWT_SECRET
+// (valor é o mesmo JWT secret do projeto, configurado via `supabase secrets set`).
+const JWT_SECRET = Deno.env.get('WALLET_JWT_SECRET')
 const UUID_NAMESPACE = Deno.env.get('WALLET_UUID_NAMESPACE')
 const NONCE_TTL_MINUTES = 10
 const JWT_EXPIRY_SECONDS = 60 * 60 // 1h (refresh flow não implementado; ver DR-001 §Gap-C)

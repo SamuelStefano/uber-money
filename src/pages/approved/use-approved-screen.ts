@@ -54,6 +54,10 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
 
   // Step 1: chama Anchor `release_loan` via edge `request-payout?action=release`
   // → USDC cai na wallet Solana do borrower (devnet).
+  //
+  // HIGH-3 fix: edge retorna 409 ou tx_release pré-existente se loan já foi released
+  // (idempotência on-chain — PDA init falha se cpf_hash já existe). Front aceita ambos:
+  // status 'confirmed' OU 'already_released' → vai direto pra usdc_received.
   const efetuar = useCallback(async () => {
     setPhase('releasing')
     try {
@@ -66,7 +70,15 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       }
       setPhase('usdc_received')
     } catch (e) {
-      toast.push(e instanceof Error ? e.message : 'Falha ao efetuar empréstimo. Tente de novo.')
+      const msg = e instanceof Error ? e.message : String(e)
+      // Se já foi released previamente, edge retorna 409 com txRelease — segue pro Step 2 mesmo assim
+      if (msg.includes('already released') || msg.includes('Loan already released')) {
+        console.warn('[efetuar] loan já released previamente, seguindo pro Step 2', msg)
+        setPhase('usdc_received')
+        return
+      }
+      console.error('[efetuar] release failed:', e)
+      toast.push(msg || 'Falha ao efetuar empréstimo. Tente de novo.')
       setPhase('approved')
     }
   }, [decision, toast])
