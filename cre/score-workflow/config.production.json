@@ -1,0 +1,7 @@
+{
+  "scoreApiBase": "https://example.supabase.co/functions/v1",
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "minIncomeBRL": 1500,
+  "scoreThreshold": 600,
+  "maxLoanUsdcMicro": "10000000"
+}
