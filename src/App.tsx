@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { AppFrame } from '@/components/organisms/app-frame'
-import { ToastProvider } from '@/components/organisms/toast-provider'
+import { ToastProvider, useToast } from '@/components/organisms/toast-provider'
 import { LoginScreen } from '@/pages/login'
 import { UploadScreen } from '@/pages/upload'
 import { HomeScreen } from '@/pages/home'
@@ -11,6 +12,7 @@ import { ApprovedScreen } from '@/pages/approved'
 import { Store } from '@/store'
 import { useStore } from '@/hooks/use-store'
 import { RouteProvider, type Route } from '@/contexts/route-context'
+import { setWalletAccessToken } from '@/lib/api'
 import type { LoanRequestPayload } from '@/types/api'
 
 const variants = {
@@ -19,7 +21,29 @@ const variants = {
   exit: (d: number) => ({ x: d > 0 ? -16 : 16, opacity: 0 }),
 }
 
-export function App() {
+function AuthGuard({ route, onForceLogin }: { route: Route; onForceLogin: () => void }) {
+  const wallet = useWallet()
+  const [{ user }] = useStore()
+  const toast = useToast()
+
+  // Telas protegidas: tudo menos login. Se a wallet desconectar (F5 sem
+  // auto-reconnect, troca de conta no Phantom, user clicou Desconectar),
+  // expulsa pra login com toast amigável.
+  useEffect(() => {
+    if (route === 'login') return
+    if (wallet.connecting) return
+    if (!wallet.connected || !wallet.publicKey) {
+      Store.set({ user: null, documents: null, lastDecision: null, lastReceipt: null, activity: [] })
+      setWalletAccessToken(null)
+      toast.push('Sua carteira desconectou — entre de novo')
+      onForceLogin()
+    }
+  }, [route, wallet.connected, wallet.connecting, wallet.publicKey, user, onForceLogin, toast])
+
+  return null
+}
+
+function AppInner() {
   const [route, setRoute] = useState<Route>('login')
   const [pendingPayload, setPendingPayload] = useState<LoanRequestPayload | null>(null)
   const [hasNavigated, setHasNavigated] = useState(false)
@@ -37,9 +61,14 @@ export function App() {
     go('home', -1)
   }, [go])
 
+  const forceLogin = useCallback(() => {
+    setPendingPayload(null)
+    go('login', -1)
+  }, [go])
+
   return (
-    <ToastProvider>
-      <RouteProvider value={{ route, goHome }}>
+    <RouteProvider value={{ route, goHome }}>
+      <AuthGuard route={route} onForceLogin={forceLogin} />
       <AppFrame>
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
@@ -78,7 +107,14 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </AppFrame>
-      </RouteProvider>
+    </RouteProvider>
+  )
+}
+
+export function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
     </ToastProvider>
   )
 }
