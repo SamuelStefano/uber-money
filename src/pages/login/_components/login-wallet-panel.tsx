@@ -13,23 +13,23 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
 
   return (
     <section style={{
-      background: 'radial-gradient(800px 600px at 70% 30%, #15151A 0%, #0A0A0B 70%)',
-      borderLeft: '1px solid rgba(255,255,255,0.04)',
+      background: 'transparent',
+      borderLeft: '1px solid rgba(10,10,15,0.06)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 'clamp(32px, 5vw, 64px)', position: 'relative', overflow: 'hidden',
     }}>
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: `
-          radial-gradient(600px 400px at 80% 10%, rgba(0,194,110,0.18) 0%, transparent 60%),
-          radial-gradient(500px 380px at 10% 90%, rgba(120,148,255,0.12) 0%, transparent 60%)
-        `,
-      }} />
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        opacity: 0.04, mixBlendMode: 'overlay',
-        backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence baseFrequency='0.88' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`,
-      }} />
+      <motion.div
+        aria-hidden
+        style={{
+          position: 'absolute', inset: -120, pointerEvents: 'none',
+          background: `
+            radial-gradient(560px 420px at 80% 20%, rgba(0,194,110,0.18) 0%, transparent 60%),
+            radial-gradient(500px 380px at 20% 80%, rgba(120,148,255,0.16) 0%, transparent 60%)
+          `,
+        }}
+        animate={{ x: [0, -20, 14, 0], y: [0, 14, -10, 0] }}
+        transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -40,16 +40,17 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
         <div style={{
           padding: 28,
           borderRadius: 24,
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
-          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.07), 0 30px 80px -30px rgba(0,194,110,0.18)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(255,255,255,0.78)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: '0 30px 60px -20px rgba(10,10,15,0.12), 0 1px 0 rgba(255,255,255,0.6) inset, inset 0 0 0 1px rgba(10,10,15,0.05)',
         }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             padding: '6px 12px 6px 10px', borderRadius: 999,
-            background: 'rgba(0,194,110,0.10)', color: 'var(--accent)',
+            background: 'var(--accent-soft)', color: 'var(--accent-deep)',
             fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-            border: '1px solid rgba(0,194,110,0.18)',
+            border: '1px solid rgba(0,194,110,0.20)',
           }}>
             <span style={{ position: 'relative', width: 6, height: 6 }}>
               <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
@@ -63,16 +64,16 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
 
           <h2 className="tight" style={{
             margin: '20px 0 0', fontSize: 36, fontWeight: 800,
-            letterSpacing: '-0.03em', color: '#fff', lineHeight: 1.05,
+            letterSpacing: '-0.03em', color: 'var(--ink)', lineHeight: 1.05,
           }}>
             Entrar com<br />
             <span style={{
-              background: 'linear-gradient(92deg, #14F195 0%, #9945FF 100%)',
+              background: 'linear-gradient(92deg, var(--accent-deep) 0%, var(--accent) 50%, #6B5BFF 100%)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>sua carteira.</span>
           </h2>
 
-          <p style={{ marginTop: 12, color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ marginTop: 12, color: 'var(--mute)', fontSize: 14, lineHeight: 1.55 }}>
             Sem e‑mail, sem senha. Uma assinatura on‑chain e pronto.
           </p>
 
@@ -87,7 +88,7 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
               color: '#04140B',
               fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
               cursor: busy ? 'not-allowed' : 'pointer',
-              boxShadow: '0 20px 50px -12px rgba(0,194,110,0.55), inset 0 2px 0 rgba(255,255,255,0.20), inset 0 -2px 0 rgba(0,0,0,0.10)',
+              boxShadow: '0 20px 50px -12px rgba(0,194,110,0.50), inset 0 2px 0 rgba(255,255,255,0.30), inset 0 -2px 0 rgba(0,0,0,0.10)',
               border: 'none',
               transition: 'transform 120ms ease',
             }}
@@ -100,14 +101,14 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
 
           <div style={{
             marginTop: 20, padding: 14,
-            borderRadius: 14, background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 14, background: 'rgba(10,10,15,0.03)',
+            border: '1px solid var(--line)',
             display: 'flex', gap: 12, alignItems: 'flex-start',
           }}>
-            <div style={{ color: 'rgba(255,255,255,0.55)', flexShrink: 0, marginTop: 1 }}>
+            <div style={{ color: 'var(--mute)', flexShrink: 0, marginTop: 1 }}>
               <Icon.Shield />
             </div>
-            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--mute)', lineHeight: 1.5 }}>
               Sua carteira, suas chaves. Não pedimos e‑mail, não criamos conta. Só uma assinatura on‑chain.
             </div>
           </div>
@@ -115,7 +116,7 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
 
         <div style={{
           marginTop: 16, textAlign: 'center',
-          fontSize: 11, color: 'rgba(255,255,255,0.30)',
+          fontSize: 11, color: 'var(--mute-2)',
           letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
         }}>
           powered by chainlink + solana

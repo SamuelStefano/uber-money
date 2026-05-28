@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { Stat } from '@/components/atoms/stat'
 
 export function LoginHero() {
@@ -7,17 +8,71 @@ export function LoginHero() {
       display: 'flex', flexDirection: 'column', justifyContent: 'center',
       position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', top: -160, left: -120, width: 520, height: 520, borderRadius: '50%', filter: 'blur(80px)', opacity: 0.45, background: 'radial-gradient(circle, rgba(0,194,110,0.55) 0%, rgba(0,194,110,0) 70%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: -200, right: -100, width: 460, height: 460, borderRadius: '50%', filter: 'blur(80px)', opacity: 0.30, background: 'radial-gradient(circle, rgba(255,180,80,0.5) 0%, rgba(255,180,80,0) 70%)', pointerEvents: 'none' }} />
+      <motion.div
+        aria-hidden
+        style={{
+          position: 'absolute', inset: -120, pointerEvents: 'none',
+          background: `
+            radial-gradient(620px 480px at 18% 22%, rgba(0,194,110,0.28) 0%, transparent 60%),
+            radial-gradient(580px 420px at 80% 18%, rgba(153,69,255,0.16) 0%, transparent 60%),
+            radial-gradient(700px 540px at 60% 95%, rgba(255,176,71,0.22) 0%, transparent 60%)
+          `,
+        }}
+        animate={{ x: [0, 24, -18, 0], y: [0, -18, 12, 0] }}
+        transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
+      />
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: 'radial-gradient(rgba(8,8,10,0.055) 0.5px, transparent 0.5px)',
+        backgroundSize: '26px 26px',
+        backgroundPosition: '-1px -1px',
+        maskImage: 'radial-gradient(circle at 30% 50%, black 0%, black 60%, transparent 92%)',
+      }} />
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        opacity: 0.025, mixBlendMode: 'multiply',
+        backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence baseFrequency='0.88' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`,
+      }} />
+
+      <motion.svg
+        aria-hidden
+        width="100%" height="2"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: '38%',
+          pointerEvents: 'none', opacity: 0.45,
+        }}
+      >
+        <motion.line
+          x1="0" y1="1" x2="100%" y2="1"
+          stroke="url(#login-beam)" strokeWidth="1"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: [0, 1, 1, 0] }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
+        />
+        <defs>
+          <linearGradient id="login-beam" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(0,194,110,0)" />
+            <stop offset="50%" stopColor="rgba(0,194,110,0.65)" />
+            <stop offset="100%" stopColor="rgba(0,194,110,0)" />
+          </linearGradient>
+        </defs>
+      </motion.svg>
 
       <div style={{ position: 'relative', maxWidth: 580 }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '6px 12px 6px 8px', borderRadius: 999,
-          background: '#fff', boxShadow: 'inset 0 0 0 1px var(--line)',
+          padding: '6px 12px 6px 10px', borderRadius: 999,
+          background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)',
+          boxShadow: 'inset 0 0 0 1px var(--line)',
           fontSize: 12, fontWeight: 600, color: 'var(--mute)', letterSpacing: '0.02em',
         }}>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--accent)' }} />
+          <span style={{ position: 'relative', width: 6, height: 6 }}>
+            <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
+            <span style={{
+              position: 'absolute', inset: -3, borderRadius: 999,
+              border: '1px solid var(--accent)', animation: 'pulse-ring 2.2s ease-out infinite',
+            }} />
+          </span>
           MICROCRÉDITO PARA MOTORISTAS
         </div>
         <h1 className="tight" style={{
@@ -26,7 +81,7 @@ export function LoginHero() {
         }}>
           Crédito na hora,<br />
           <span style={{
-            background: 'linear-gradient(90deg, var(--accent-deep) 0%, var(--accent) 100%)',
+            background: 'linear-gradient(92deg, var(--accent-deep) 0%, var(--accent) 60%, #6B5BFF 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>pra quem roda.</span>
