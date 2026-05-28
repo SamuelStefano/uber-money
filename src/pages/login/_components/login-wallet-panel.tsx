@@ -56,15 +56,11 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
             }}>sua carteira.</span>
           </h2>
 
-          <p style={{ marginTop: 12, color: 'var(--mute)', fontSize: 14, lineHeight: 1.55 }}>
-            Sem e‑mail, sem senha. Uma assinatura on‑chain e pronto.
-          </p>
-
           <button
             onClick={onConnect}
             disabled={busy}
             style={{
-              marginTop: 28, width: '100%',
+              marginTop: 32, width: '100%',
               height: 64, borderRadius: 18, padding: '0 22px',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 12,
               background: 'linear-gradient(135deg, #00D478 0%, #00C26E 50%, #00A65C 100%)',
