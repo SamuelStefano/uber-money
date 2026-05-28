@@ -24,7 +24,7 @@ serve(async (req) => {
   if (!payload.imageBase64 || payload.imageBase64.length < 100) return json({ error: 'Empty image' }, 400, req)
   if (payload.imageBase64.length > 5_000_000) return json({ error: 'Image too large (max ~3.75MB)' }, 413, req)
 
-  const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp'] as const
+  const ALLOWED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
   const mediaType = (payload.mediaType ?? 'image/jpeg').toLowerCase() as typeof ALLOWED_MEDIA[number]
   if (!ALLOWED_MEDIA.includes(mediaType)) {
     return json({ error: `Unsupported mediaType (use ${ALLOWED_MEDIA.join(', ')})` }, 415, req)
