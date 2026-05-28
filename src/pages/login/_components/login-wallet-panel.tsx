@@ -45,25 +45,8 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
           WebkitBackdropFilter: 'blur(16px)',
           boxShadow: '0 30px 60px -20px rgba(10,10,15,0.12), 0 1px 0 rgba(255,255,255,0.6) inset, inset 0 0 0 1px rgba(10,10,15,0.05)',
         }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px 6px 10px', borderRadius: 999,
-            background: 'var(--accent-soft)', color: 'var(--accent-deep)',
-            fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-            border: '1px solid rgba(0,194,110,0.20)',
-          }}>
-            <span style={{ position: 'relative', width: 6, height: 6 }}>
-              <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
-              <span style={{
-                position: 'absolute', inset: -3, borderRadius: 999,
-                border: '1px solid var(--accent)', animation: 'pulse-ring 2.2s ease-out infinite',
-              }} />
-            </span>
-            SOLANA DEVNET · ATIVO
-          </div>
-
           <h2 className="tight" style={{
-            margin: '20px 0 0', fontSize: 36, fontWeight: 800,
+            margin: 0, fontSize: 36, fontWeight: 800,
             letterSpacing: '-0.03em', color: 'var(--ink)', lineHeight: 1.05,
           }}>
             Entrar com<br />
@@ -112,14 +95,6 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
               Sua carteira, suas chaves. Não pedimos e‑mail, não criamos conta. Só uma assinatura on‑chain.
             </div>
           </div>
-        </div>
-
-        <div style={{
-          marginTop: 16, textAlign: 'center',
-          fontSize: 11, color: 'var(--mute-2)',
-          letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
-        }}>
-          powered by chainlink + solana
         </div>
       </motion.div>
     </section>
