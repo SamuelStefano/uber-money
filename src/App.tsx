@@ -47,7 +47,7 @@ export function App() {
             transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
             style={{ position: 'absolute', inset: 0 }}
           >
-            {route === 'login' && <LoginScreen onLogin={() => go('upload', 1)} />}
+            {route === 'login' && <LoginScreen onLogin={(next) => go(next, 1)} />}
             {route === 'upload' && (
               <UploadScreen onDone={(docs) => { Store.set({ documents: docs }); go('home', 1) }} />
             )}

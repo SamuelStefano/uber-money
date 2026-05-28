@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import bs58 from 'bs58'
-import { HAS_BACKEND, getNonce, verifyWallet } from '@/lib/api'
+import { HAS_BACKEND, getNonce, verifyWallet, getCreditStatus } from '@/lib/api'
 import { useToast } from '@/components/organisms/toast-provider'
 import { Store } from '@/store'
 import { uid } from '@/utils/uid'
@@ -10,7 +10,7 @@ import { MOCK_USER_NAME } from '@/consts/mock'
 import type { User } from '@/types/domain'
 
 interface UseLoginScreenInput {
-  onLogin: () => void
+  onLogin: (next: 'home' | 'upload') => void
 }
 
 interface UseLoginScreenOutput {
@@ -67,8 +67,15 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
           }
         }
         Store.set({ user })
+        let next: 'home' | 'upload' = 'upload'
+        if (HAS_BACKEND) {
+          try {
+            const credit = await getCreditStatus()
+            if (credit.has_cnh && credit.has_earnings) next = 'home'
+          } catch (e) { console.warn('[login] credit-status fetch failed, defaulting to upload', e) }
+        }
         setWaiting(false)
-        onLogin()
+        onLogin(next)
       } catch (e) {
         // Dev visibility: detalhes do erro de auth ajudam diagnose sem expor pro user.
         console.error('[login] auth flow failed:', e)

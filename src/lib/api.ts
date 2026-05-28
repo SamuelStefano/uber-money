@@ -80,6 +80,8 @@ export async function processDocument(kind: DocKind, imageBase64: string, mediaT
 // ─── Credit status (último loan_request do user) ────────────────
 export interface CreditStatus {
   has_request: boolean
+  has_cnh: boolean
+  has_earnings: boolean
   score: number | null
   limit_brl: number | null
   interest_pct: number | null
