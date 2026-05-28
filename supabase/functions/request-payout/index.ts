@@ -194,6 +194,26 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   }
 
   // sandbox ou prod → Woovi real
+  // Customer precisa de pelo menos um identificador (CPF, email ou telefone) — sandbox rejeita sem.
+  const { data: cnhDocForCustomer } = await admin
+    .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
+  const customerCpf = ((cnhDocForCustomer?.ocr_data as { cpf?: string } | null)?.cpf ?? '').replace(/\D/g, '')
+  const { data: authUser } = await admin.auth.admin.getUserById(userId)
+  const customerEmail = authUser?.user?.email
+  const customerPhone = authUser?.user?.phone
+
+  const customer: Record<string, string> = { name: 'Motorista Uber Money' }
+  if (customerCpf && customerCpf.length === 11) customer.taxID = customerCpf
+  else if (body.pixKeyType === 'cpf') customer.taxID = body.pixKey.replace(/\D/g, '')
+  if (customerEmail) customer.email = customerEmail
+  else if (body.pixKeyType === 'email') customer.email = body.pixKey
+  if (customerPhone) customer.phone = customerPhone
+  else if (body.pixKeyType === 'phone') customer.phone = body.pixKey
+
+  if (!customer.taxID && !customer.email && !customer.phone) {
+    return json({ error: 'Customer needs CPF, email or phone (none available)' }, 400, req)
+  }
+
   try {
     const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
       method: 'POST',
@@ -203,7 +223,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
         correlationID: correlationId,
         value: amountCents,
         comment: `Uber Money - emprestimo ${body.loanId.slice(0, 8)}`,
-        customer: { name: 'Motorista Uber Money', taxID: body.pixKeyType === 'cpf' ? body.pixKey : undefined },
+        customer,
       }),
       signal: AbortSignal.timeout(25_000),
     })
