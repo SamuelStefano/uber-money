@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { TopNav } from './top-nav'
-import { Footer } from './footer'
 
 export function AppFrame({ children }: { children: ReactNode }) {
   return (
@@ -11,7 +10,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
     }}>
       <TopNav />
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>{children}</div>
-      <Footer />
     </div>
   )
 }

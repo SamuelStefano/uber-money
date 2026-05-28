@@ -80,41 +80,38 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
     void run()
   }, [wallet.connected, wallet.publicKey, onLogin, toast, wallet.signMessage, wallet.wallet?.adapter?.name])
 
-  // Pattern correto pra wallet-adapter com autoConnect=false:
-  // (1) connect() faz só wallet.select('Phantom')
-  // (2) useEffect abaixo dispara wallet.connect() do hook quando provider re-renderiza
-  //     com a wallet selecionada. Chamar adapter.connect() direto não atualiza state.
-  const pendingConnectRef = useRef(false)
-
-  useEffect(() => {
-    if (!pendingConnectRef.current) return
-    if (!wallet.wallet) return                  // ainda não selecionou
-    if (wallet.connected || wallet.connecting) return
-    pendingConnectRef.current = false
-    console.log('[connect] disparando wallet.connect() pra', wallet.wallet.adapter.name)
-    wallet.connect().catch((e) => {
-      console.error('[connect] wallet.connect falhou:', e)
-      toast.push(`Conexão falhou: ${e?.message ?? 'erro desconhecido'}`)
-      setWaiting(false)
-    })
-  }, [wallet, wallet.wallet, wallet.connected, wallet.connecting, toast])
-
-  const connect = useCallback(() => {
+  // Fix squad A5: chamar wallet.connect() DIRETO no callback resolve Bug 3
+  // (segundo click com Phantom já selecionada = wallet.select no-op = useEffect
+  // intermediário nunca dispara). Versão direta funciona em ambos os caminhos.
+  const connect = useCallback(async () => {
+    console.log('[onConnect] click recebido')      // A1: confirma callback dispara
     setWaiting(true)
     signedForPubkeyRef.current = null
 
-    console.log('[connect] wallets disponíveis:', wallet.wallets.map((w) => w.adapter.name))
     const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
+    console.log('[connect] wallets disponíveis:', wallet.wallets.map((w) => w.adapter.name))
 
-    if (phantom) {
-      // Marca intent de conectar e seleciona. useEffect acima dispara connect()
-      // quando o provider re-renderizar com wallet.wallet preenchida.
-      pendingConnectRef.current = true
-      wallet.select(phantom.adapter.name)
-    } else {
-      // Sem Phantom detectada → modal
+    if (!phantom) {
       try { setVisible(true) }
-      catch { toast.push('Phantom não detectada. Instale a extensão.'); setWaiting(false) }
+      catch { toast.push('Phantom não detectada.'); setWaiting(false) }
+      return
+    }
+
+    try {
+      // Só seleciona se ainda não está selecionada (evita Bug 3 — no-op silencioso)
+      if (wallet.wallet?.adapter?.name !== 'Phantom') {
+        wallet.select(phantom.adapter.name)
+        // tick pro provider aplicar select e popular wallet.wallet antes de connect()
+        await new Promise((r) => setTimeout(r, 80))
+      }
+      console.log('[connect] chamando wallet.connect()')
+      await wallet.connect()
+      // useEffect de auth (signMessage) dispara quando wallet.connected = true
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[connect] falhou:', e)
+      toast.push(`Conexão falhou: ${msg}`)
+      setWaiting(false)
     }
   }, [wallet, setVisible, toast])
 

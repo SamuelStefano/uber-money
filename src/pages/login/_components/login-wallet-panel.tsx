@@ -8,7 +8,9 @@ interface LoginWalletPanelProps {
 }
 
 export function LoginWalletPanel({ waiting, connecting, onConnect }: LoginWalletPanelProps) {
-  const busy = waiting || connecting
+  // A1 fix: usar só `waiting` pra disabled. Se `connecting` ficar travado em true
+  // (ex: connect anterior travou no provider), botão fica preso pra sempre.
+  const busy = waiting
   return (
     <section style={{
       background: '#fff', borderLeft: '1px solid var(--line)',
@@ -40,10 +42,6 @@ export function LoginWalletPanel({ waiting, connecting, onConnect }: LoginWallet
               : <span style={{ width: 26, height: 26, borderRadius: 8, background: 'radial-gradient(circle at 30% 30%, #14F195 0%, #9945FF 100%)' }} />}
             Conectar carteira Solana
           </button>
-
-          <div style={{ fontSize: 12, color: 'var(--mute-2)', textAlign: 'center', marginTop: 4 }}>
-            Phantom · Solflare · qualquer wallet adapter
-          </div>
 
           <div style={{
             marginTop: 18, padding: 16, borderRadius: 14,

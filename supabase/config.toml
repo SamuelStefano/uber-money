@@ -6,3 +6,17 @@ verify_jwt = false
 
 [functions.woovi-webhook]
 verify_jwt = false
+
+# Edges autenticadas: JWT validado MANUALMENTE dentro da função (admin.auth.getUser).
+# verify_jwt=true no gateway BLOQUEIA preflight OPTIONS sem Authorization → CORS quebra.
+[functions.request-payout]
+verify_jwt = false
+
+[functions.request-loan]
+verify_jwt = false
+
+[functions.process-document]
+verify_jwt = false
+
+[functions.parse-uber-print]
+verify_jwt = false

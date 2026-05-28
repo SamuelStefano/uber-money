@@ -4,9 +4,10 @@
 // 1 edge fn com 2 handlers internos (não 2 fns deployadas — A6 amend).
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3'
 import { json, handleOptions } from '../_shared/cors.ts'
-import { releaseLoan as anchorReleaseLoan } from '../_shared/anchor-signer.ts'
+
+// @solana/web3.js + @solana/spl-token são GRANDES e estouravam WORKER_RESOURCE_LIMIT
+// no cold start do isolate Edge. Lazy-load só no caminho release.
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -83,6 +84,11 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
   if (!userRow2?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
 
   try {
+    // Lazy-load Anchor signer + PublicKey só nesse caminho (cold-start friendly)
+    const [{ releaseLoan: anchorReleaseLoan }, { PublicKey }] = await Promise.all([
+      import('../_shared/anchor-signer.ts'),
+      import('https://esm.sh/@solana/web3.js@1.95.3'),
+    ])
     const txSig = await anchorReleaseLoan({
       cpfHash,
       amount: amountUSDC,
