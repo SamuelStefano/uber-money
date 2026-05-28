@@ -76,6 +76,15 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
           borrower: wallet.publicKey,
         })
 
+        // Simulate ANTES de Phantom — captura erro do Anchor com logs reais
+        console.log('[efetuar] simulando tx')
+        const sim = await connection.simulateTransaction(tx, undefined, [wallet.publicKey])
+        console.log('[efetuar] simulate result:', sim.value)
+        if (sim.value.err) {
+          console.error('[efetuar] simulate FAIL — logs:', sim.value.logs)
+          throw new Error(`Simulate falhou: ${JSON.stringify(sim.value.err)}\nLogs:\n${(sim.value.logs ?? []).join('\n')}`)
+        }
+
         console.log('[efetuar] Phantom popup — assinar tx')
         const sig = await wallet.sendTransaction(tx, connection)
         console.log('[efetuar] tx enviada:', sig, '— aguardando confirmação')
@@ -101,7 +110,8 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       setPhase('usdc_received')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      console.error('[efetuar] release failed:', e)
+      const logs = (e as { logs?: string[] })?.logs
+      console.error('[efetuar] release failed:', e, 'logs:', logs)
       // User cancelou Phantom popup → silente, volta pro approved
       if (msg.includes('User rejected') || msg.includes('cancelled')) {
         setPhase('approved')
