@@ -80,9 +80,14 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
         onLogin(next)
       } catch (e) {
         // Dev visibility: detalhes do erro de auth ajudam diagnose sem expor pro user.
+        const msg = e instanceof Error ? e.message : String(e)
         console.error('[login] auth flow failed:', e)
-        signedForPubkeyRef.current = null  // libera retry se falhou
-        toast.push('Falha na autenticação. Tente reconectar.')
+        // User cancelou signMessage → desconectar wallet pra evitar useEffect re-disparar.
+        // Sem disconnect, o ref limpo + signMessage como nova ref a cada render reabre popup.
+        const canceled = /reject|cancel|denied|user/i.test(msg)
+        try { await wallet.disconnect() } catch { /* noop */ }
+        signedForPubkeyRef.current = null
+        if (!canceled) toast.push('Falha na autenticação. Tente reconectar.')
         setWaiting(false)
       }
     }
