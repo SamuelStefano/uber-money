@@ -74,6 +74,15 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
 
   // Step 1: DR-004 F+ — motorista assina via Phantom + Anchor valida on-chain.
   const efetuar = useCallback(async () => {
+    // Guard: F+ on-chain exige wallet conectada. Sem ela, NÃO cai no legacy
+    // (que está sendo descontinuado e crasha). Pede reconexão explícita.
+    if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW) {
+      if (!wallet.publicKey || !wallet.signTransaction) {
+        toast.push('Reconecte sua carteira pra efetuar o empréstimo')
+        try { if (!wallet.connected) await wallet.connect() } catch { /* user cancelou */ }
+        return
+      }
+    }
     setPhase('releasing')
     try {
       if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
