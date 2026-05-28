@@ -2,22 +2,21 @@ import { Screen } from '@/components/atoms/screen'
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { UploadZone } from './_components/upload-zone'
-import { CnhReviewSheet } from './_components/cnh-review-sheet'
+import { CnhReviewCard } from './_components/cnh-review-card'
 import { useUploadScreen } from './use-upload-screen'
-import type { CnhData, EarningsData, UploadedDocuments } from '@/types/documents'
+import type { EarningsData, UploadedDocuments } from '@/types/documents'
 
 interface UploadScreenProps {
   onDone: (docs: UploadedDocuments) => void
 }
 
-const renderCnh = (d: CnhData) => d?.name ? `${d.name} · cat. ${d.category ?? '?'}` : 'Lido'
 const renderEarnings = (d: EarningsData) =>
   d?.gross_monthly_income
     ? `R$ ${Number(d.gross_monthly_income).toFixed(0)}/mês · ${d.ride_count ?? '?'} corridas`
     : 'Lido'
 
 export function UploadScreen({ onDone }: UploadScreenProps) {
-  const { cnh, earnings, loading, err, both, handle, cnhReviewOpen, cnhReview, confirmCnh, reuploadCnh } = useUploadScreen()
+  const { cnh, cnhFile, earnings, loading, err, both, handle, reanalyzeCnh, deleteCnh } = useUploadScreen()
 
   return (
     <Screen label="02.5 Upload" scroll>
@@ -30,14 +29,24 @@ export function UploadScreen({ onDone }: UploadScreenProps) {
         </p>
 
         <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
-          <UploadZone<CnhData>
-            label="Sua CNH"
-            hint="Frente, boa luz"
-            onFile={(f) => handle(f, 'cnh')}
-            loading={loading === 'cnh'}
-            result={cnh}
-            renderResult={renderCnh}
-          />
+          {cnh ? (
+            <CnhReviewCard
+              data={cnh}
+              file={cnhFile}
+              analyzing={loading === 'cnh'}
+              onReanalyze={reanalyzeCnh}
+              onDelete={deleteCnh}
+            />
+          ) : (
+            <UploadZone
+              label="Sua CNH"
+              hint="Frente, boa luz · JPG, PNG ou PDF"
+              onFile={(f) => handle(f, 'cnh')}
+              loading={loading === 'cnh'}
+              result={null}
+              renderResult={() => ''}
+            />
+          )}
           <UploadZone<EarningsData>
             label="Tela de ganhos (Uber)"
             hint="Print do app"
@@ -66,13 +75,6 @@ export function UploadScreen({ onDone }: UploadScreenProps) {
           </div>
         </div>
       </div>
-
-      <CnhReviewSheet
-        open={cnhReviewOpen}
-        data={cnhReview}
-        onConfirm={confirmCnh}
-        onReupload={reuploadCnh}
-      />
     </Screen>
   )
 }

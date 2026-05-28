@@ -8,46 +8,45 @@ type AllowedMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application
 
 interface UseUploadScreenOutput {
   cnh: CnhData | null
+  cnhFile: File | null
   earnings: EarningsData | null
   loading: DocKind | null
   err: string | null
   both: boolean
   handle: (file: File, kind: DocKind) => Promise<void>
-  // Sheet de confirmação da CNH (Samuel: mostrar dados extraídos + botão "está correto?")
-  cnhReviewOpen: boolean
-  cnhReview: CnhData | null
-  confirmCnh: (data: CnhData) => void
-  reuploadCnh: () => void
+  reanalyzeCnh: () => Promise<void>
+  deleteCnh: () => void
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 export function useUploadScreen(): UseUploadScreenOutput {
   const [cnh, setCnh] = useState<CnhData | null>(null)
+  const [cnhFile, setCnhFile] = useState<File | null>(null)
   const [earnings, setEarnings] = useState<EarningsData | null>(null)
   const [loading, setLoading] = useState<DocKind | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [cnhReviewOpen, setCnhReviewOpen] = useState(false)
-  const [cnhReview, setCnhReview] = useState<CnhData | null>(null)
   const toast = useToast()
+
+  const runExtract = useCallback(async (file: File, kind: DocKind) => {
+    if (HAS_BACKEND) {
+      const b64 = await fileToBase64(file)
+      const result = await processDocument(kind, b64, file.type as AllowedMediaType)
+      return result.ocr_data as CnhData | EarningsData
+    }
+    await sleep(MOCK_OCR_DELAY_MS)
+    return kind === 'cnh' ? MOCK_OCR_CNH : MOCK_OCR_EARNINGS
+  }, [])
 
   const handle = useCallback(async (file: File, kind: DocKind) => {
     if (!file) return
     setLoading(kind); setErr(null)
     try {
-      let extracted: CnhData | EarningsData
-      if (HAS_BACKEND) {
-        const b64 = await fileToBase64(file)
-        const result = await processDocument(kind, b64, file.type as AllowedMediaType)
-        extracted = result.ocr_data as CnhData | EarningsData
-      } else {
-        await sleep(MOCK_OCR_DELAY_MS)
-        extracted = kind === 'cnh' ? MOCK_OCR_CNH : MOCK_OCR_EARNINGS
-      }
+      const extracted = await runExtract(file, kind)
       if (kind === 'cnh') {
-        setCnhReview(extracted as CnhData)
-        setCnhReviewOpen(true)
-        toast.push('CNH lida — confirme os dados')
+        setCnhFile(file)
+        setCnh(extracted as CnhData)
+        toast.push('CNH lida — confira os dados')
       } else {
         setEarnings(extracted as EarningsData)
         toast.push('Extrato lido')
@@ -58,25 +57,31 @@ export function useUploadScreen(): UseUploadScreenOutput {
     } finally {
       setLoading(null)
     }
-  }, [toast])
+  }, [toast, runExtract])
 
-  const confirmCnh = useCallback((data: CnhData) => {
-    setCnh(data)
-    setCnhReview(null)
-    setCnhReviewOpen(false)
-    toast.push('CNH confirmada')
-  }, [toast])
+  const reanalyzeCnh = useCallback(async () => {
+    if (!cnhFile) return
+    setLoading('cnh'); setErr(null)
+    try {
+      const extracted = await runExtract(cnhFile, 'cnh')
+      setCnh(extracted as CnhData)
+      toast.push('Re-analisado')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      toast.push('Falha ao re-analisar.')
+    } finally {
+      setLoading(null)
+    }
+  }, [cnhFile, runExtract, toast])
 
-  const reuploadCnh = useCallback(() => {
+  const deleteCnh = useCallback(() => {
     setCnh(null)
-    setCnhReview(null)
-    setCnhReviewOpen(false)
+    setCnhFile(null)
   }, [])
 
   return {
-    cnh, earnings, loading, err,
+    cnh, cnhFile, earnings, loading, err,
     both: !!cnh && !!earnings,
-    handle,
-    cnhReviewOpen, cnhReview, confirmCnh, reuploadCnh,
+    handle, reanalyzeCnh, deleteCnh,
   }
 }
