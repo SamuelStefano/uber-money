@@ -203,15 +203,21 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   const customerPhone = authUser?.user?.phone
 
   const customer: Record<string, string> = { name: 'Motorista Uber Money' }
-  if (customerCpf && customerCpf.length === 11) customer.taxID = customerCpf
-  else if (body.pixKeyType === 'cpf') customer.taxID = body.pixKey.replace(/\D/g, '')
+  const candidateCpf = (customerCpf && customerCpf.length === 11)
+    ? customerCpf
+    : (body.pixKeyType === 'cpf' ? body.pixKey.replace(/\D/g, '') : '')
+  if (candidateCpf && isValidCpf(candidateCpf)) {
+    customer.taxID = candidateCpf
+  } else if (candidateCpf) {
+    console.warn('[payout] CPF candidato falhou checksum, omitindo taxID:', candidateCpf)
+  }
   if (customerEmail) customer.email = customerEmail
   else if (body.pixKeyType === 'email') customer.email = body.pixKey
   if (customerPhone) customer.phone = customerPhone
   else if (body.pixKeyType === 'phone') customer.phone = body.pixKey
 
   if (!customer.taxID && !customer.email && !customer.phone) {
-    return json({ error: 'Customer needs CPF, email or phone (none available)' }, 400, req)
+    return json({ error: 'Customer needs valid CPF, email or phone (none available)' }, 400, req)
   }
 
   try {
@@ -245,6 +251,18 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+function isValidCpf(cpf: string): boolean {
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
+  const digits = cpf.split('').map(Number)
+  for (let i = 9; i < 11; i++) {
+    let sum = 0
+    for (let j = 0; j < i; j++) sum += digits[j] * (i + 1 - j)
+    const check = (sum * 10) % 11 % 10
+    if (check !== digits[i]) return false
+  }
+  return true
+}
+
 async function sha256Concat(a: Uint8Array, b: Uint8Array): Promise<Uint8Array> {
   const buf = new Uint8Array(a.length + b.length)
   buf.set(a, 0); buf.set(b, a.length)
