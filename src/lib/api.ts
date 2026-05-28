@@ -121,10 +121,10 @@ export type PixKeyType = 'cpf' | 'email' | 'phone' | 'evp'
 
 interface PayoutResponse {
   payoutId: string
-  status: 'pending'
+  status: 'pending' | 'confirmed'
   correlationId: string
   amountBRL: number
-  mode?: 'prod' | 'mock'
+  mode?: 'prod' | 'mock' | 'sandbox'
 }
 
 interface ReleaseResponse {

@@ -43,8 +43,17 @@ interface UseApprovedScreenOutput {
 
 async function executePayout(decision: LoanDecision, pixKey: string): Promise<PayoutReceipt> {
   if (HAS_BACKEND && decision.loanId) {
-    const { payoutId } = await requestPayout(decision.loanId, pixKey, 'email')
-    return pollUntilConfirmed(payoutId)
+    const r = await requestPayout(decision.loanId, pixKey, 'email')
+    // Sandbox/mock confirma sync — fabrica receipt sem polling (RLS pode bloquear leitura).
+    if (r.status === 'confirmed') {
+      return {
+        id: `SANDBOX-${r.correlationId.slice(0, 8)}`,
+        amountBRL: r.amountBRL,
+        timestamp: new Date().toISOString(),
+        to: pixKey,
+      }
+    }
+    return pollUntilConfirmed(r.payoutId)
   }
   return sendPixMock({ amountBRL: decision.approvedAmountBRL, to: pixKey })
 }
