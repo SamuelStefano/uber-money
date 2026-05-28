@@ -64,7 +64,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
   const efetuar = useCallback(async () => {
     setPhase('releasing')
     try {
-      if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW && wallet.publicKey && wallet.sendTransaction) {
+      if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
         // F+ on-chain flow
         console.log('[efetuar] onchain flow — pegando attestation do oracle')
         const att = await signScore(decision.loanId)
@@ -77,7 +77,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
         })
 
         // Simulate ANTES de Phantom — captura erro do Anchor com logs reais
-        console.log('[efetuar] simulando tx')
+        console.log('[efetuar] simulando tx (size:', tx.serializeMessage().length, 'bytes)')
         const sim = await connection.simulateTransaction(tx, undefined, [wallet.publicKey])
         console.log('[efetuar] simulate result:', sim.value)
         if (sim.value.err) {
@@ -85,8 +85,14 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
           throw new Error(`Simulate falhou: ${JSON.stringify(sim.value.err)}\nLogs:\n${(sim.value.logs ?? []).join('\n')}`)
         }
 
-        console.log('[efetuar] Phantom popup — assinar tx')
-        const sig = await wallet.sendTransaction(tx, connection)
+        // Phantom só assina — envio via nossa connection (devnet RPC garantido)
+        console.log('[efetuar] Phantom popup — só assinar')
+        const signed = await wallet.signTransaction!(tx)
+        console.log('[efetuar] assinada, enviando via connection devnet')
+        const sig = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: true,
+          maxRetries: 3,
+        })
         console.log('[efetuar] tx enviada:', sig, '— aguardando confirmação')
         await connection.confirmTransaction(sig, 'confirmed')
 
