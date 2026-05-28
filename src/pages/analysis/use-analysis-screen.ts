@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { requestCreditMock } from '@/lib/mock'
 import { HAS_BACKEND, requestLoan } from '@/lib/api'
@@ -26,7 +26,21 @@ export function useAnalysisScreen({ payload, onDone }: UseAnalysisScreenInput): 
   const [step, setStep] = useState(0)
   const toast = useToast()
 
+  // Refs estabilizam callbacks sem precisar do consumidor usar useCallback.
+  // Sem isso, qualquer re-render do pai dispara fetchDecision de novo (loop).
+  const onDoneRef = useRef(onDone)
+  const toastRef = useRef(toast)
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
+  useEffect(() => { toastRef.current = toast }, [toast])
+
+  // Guard pra request-loan rodar UMA vez por payload (mesmo com strict-mode).
+  const startedForRef = useRef<string | null>(null)
+
   useEffect(() => {
+    const key = `${payload.amountBRL}|${payload.reason}`
+    if (startedForRef.current === key) return
+    startedForRef.current = key
+
     let mounted = true
     const stepTimer = setInterval(() => {
       setStep((s) => Math.min(ANALYSIS_STEPS.length - 1, s + 1))
@@ -36,19 +50,19 @@ export function useAnalysisScreen({ payload, onDone }: UseAnalysisScreenInput): 
       .then((decision) => {
         if (!mounted) return
         Store.set({ lastDecision: decision })
-        setTimeout(() => { if (mounted) onDone(decision) }, ANALYSIS_DONE_DELAY_MS)
+        setTimeout(() => { if (mounted) onDoneRef.current(decision) }, ANALYSIS_DONE_DELAY_MS)
       })
       .catch((e) => {
         if (!mounted) return
-        toast.push(e instanceof Error ? e.message : 'Conexão instável. Tente de novo.')
-        setTimeout(() => { if (mounted) onDone(null, true) }, ANALYSIS_ERROR_DELAY_MS)
+        toastRef.current.push(e instanceof Error ? e.message : 'Conexão instável. Tente de novo.')
+        setTimeout(() => { if (mounted) onDoneRef.current(null, true) }, ANALYSIS_ERROR_DELAY_MS)
       })
 
     return () => {
       mounted = false
       clearInterval(stepTimer)
     }
-  }, [payload, onDone, toast])
+  }, [payload])
 
   return { step }
 }
