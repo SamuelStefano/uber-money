@@ -3,7 +3,6 @@ import { Screen } from '@/components/atoms/screen'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
-import { greeting } from '@/utils/greeting'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
 import { RequestCreditCta } from './_components/request-credit-cta'
@@ -48,25 +47,9 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32, minWidth: 0 }}>
-          <motion.header variants={item} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{
-              display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8,
-              padding: '6px 12px 6px 10px', borderRadius: 999,
-              background: 'rgba(10,10,15,0.04)', border: '1px solid var(--line)',
-              fontSize: 12, fontWeight: 600, color: 'var(--mute)',
-            }}>
-              <span style={{ position: 'relative', width: 6, height: 6 }}>
-                <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
-                <span style={{
-                  position: 'absolute', inset: -3, borderRadius: 999,
-                  border: '1px solid var(--accent)', animation: 'pulse-ring 2.2s ease-out infinite',
-                }} />
-              </span>
-              {greeting()}
-            </div>
-
+          <motion.header variants={item}>
             <h1 className="tight" style={{
-              margin: '8px 0 0',
+              margin: 0,
               fontSize: 'clamp(48px, 6.2vw, 76px)',
               fontWeight: 500, lineHeight: 0.96,
               letterSpacing: '-0.04em', color: 'var(--ink)',
