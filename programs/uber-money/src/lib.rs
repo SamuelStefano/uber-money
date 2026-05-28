@@ -95,16 +95,25 @@ pub mod uber_money {
         let now = Clock::get()?.unix_timestamp;
         require!(now <= expires_at, UberError::AttestationExpired);
 
-        // 2. Verifica Ed25519 attestation (ix idx 0 da tx)
+        // 2. Verifica Ed25519 attestation (scan da tx — Phantom v24+ auto-prependa
+        //    ComputeBudget IXs pra priority fee, então Ed25519 pode estar em qualquer
+        //    posição. Loop até achar uma ix com program_id == ED25519_PROGRAM_ID).
         let ix_sysvar = &ctx.accounts.instructions_sysvar;
-        let ed25519_ix = load_instruction_at_checked(0, ix_sysvar)
-            .map_err(|_| UberError::MissingAttestation)?;
-        require!(
-            ed25519_ix.program_id == ED25519_PROGRAM_ID,
-            UberError::MissingAttestation
-        );
+        let mut ed25519_data: Option<Vec<u8>> = None;
+        for i in 0u16..16u16 {
+            match load_instruction_at_checked(i as usize, ix_sysvar) {
+                Ok(ix) => {
+                    if ix.program_id == ED25519_PROGRAM_ID {
+                        ed25519_data = Some(ix.data);
+                        break;
+                    }
+                }
+                Err(_) => break, // fim da lista de ixs
+            }
+        }
+        let ed25519_data = ed25519_data.ok_or(UberError::MissingAttestation)?;
         verify_ed25519_attestation(
-            &ed25519_ix.data,
+            &ed25519_data,
             &ORACLE_PUBKEY,
             cpf_hash,
             amount,
