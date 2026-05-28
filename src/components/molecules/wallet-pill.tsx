@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { Icon } from '@/components/atoms/icon'
 import { useToast } from '@/components/organisms/toast-provider'
 import { useOutsideClick } from '@/hooks/use-outside-click'
 import { useSolBalance } from '@/hooks/use-sol-balance'
+import { Store } from '@/store'
+import { setWalletAccessToken } from '@/lib/api'
 
 interface WalletPillProps {
   address: string
@@ -18,6 +21,7 @@ function fmtSol(sol: number | null): string {
 
 export function WalletPill({ address, provider }: WalletPillProps) {
   const toast = useToast()
+  const wallet = useWallet()
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
   const ref = useOutsideClick<HTMLDivElement>(open, close)
@@ -33,6 +37,14 @@ export function WalletPill({ address, provider }: WalletPillProps) {
     } catch {
       toast.push('Não foi possível copiar')
     }
+  }
+
+  const disconnect = async () => {
+    setOpen(false)
+    try { await wallet.disconnect() } catch { /* noop */ }
+    setWalletAccessToken(null)
+    Store.set({ user: null, documents: null, lastDecision: null, lastReceipt: null, activity: [] })
+    toast.push('Carteira desconectada')
   }
 
   return (
@@ -114,6 +126,17 @@ export function WalletPill({ address, provider }: WalletPillProps) {
               Ver explorer
             </a>
           </div>
+          <button
+            onClick={disconnect}
+            style={{
+              marginTop: 10, width: '100%', height: 38, borderRadius: 10,
+              background: 'rgba(220,60,60,0.06)', color: '#B23A3A',
+              fontWeight: 600, fontSize: 13, border: '1px solid rgba(220,60,60,0.18)',
+              cursor: 'pointer',
+            }}
+          >
+            Desconectar carteira
+          </button>
         </div>
       )}
     </div>

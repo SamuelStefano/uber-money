@@ -18,8 +18,9 @@ export function AppWalletProvider({ children }: { children: ReactNode }) {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      {/* autoConnect=false → conexão só dispara quando user clica no botão (não no boot) */}
-      <WalletProvider wallets={wallets} autoConnect={false}>
+      {/* autoConnect=true → após F5, se Phantom confia no domínio, reconecta */}
+      {/* sozinho. Sign do JWT ainda dispara popup do Phantom (esperado). */}
+      <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

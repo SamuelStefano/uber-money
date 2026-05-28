@@ -1,31 +1,31 @@
 import { motion } from 'framer-motion'
 
-// BG da home — papel quente como base + aurora drift visível + grid sutil + 2 beams.
+// BG home — paleta cripto fria: verde Solana + roxo Solana + azul. Aurora drift visível.
 export function HomeBackdrop() {
   return (
     <>
       <div aria-hidden style={{
         position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
-        background: 'linear-gradient(180deg, #F4F0E8 0%, #ECE7DD 100%)',
+        background: 'linear-gradient(180deg, #EEF1F2 0%, #E5EAEE 100%)',
       }} />
 
       <motion.div
         aria-hidden
         style={{
-          position: 'absolute', inset: -140, pointerEvents: 'none', zIndex: 0,
+          position: 'absolute', inset: -160, pointerEvents: 'none', zIndex: 0,
           background: `
-            radial-gradient(720px 540px at 18% 18%, rgba(0,194,110,0.22) 0%, transparent 60%),
-            radial-gradient(640px 480px at 86% 28%, rgba(120,148,255,0.20) 0%, transparent 60%),
-            radial-gradient(780px 600px at 70% 95%, rgba(255,176,71,0.18) 0%, transparent 60%)
+            radial-gradient(760px 580px at 14% 16%, rgba(20,241,149,0.30) 0%, transparent 60%),
+            radial-gradient(680px 520px at 88% 24%, rgba(153,69,255,0.24) 0%, transparent 60%),
+            radial-gradient(820px 620px at 70% 96%, rgba(46,124,255,0.22) 0%, transparent 60%)
           `,
         }}
-        animate={{ x: [0, 30, -18, 0], y: [0, -22, 14, 0] }}
-        transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
+        animate={{ x: [0, 36, -22, 0], y: [0, -26, 16, 0] }}
+        transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
       />
 
       <div aria-hidden style={{
         position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
-        backgroundImage: 'radial-gradient(rgba(8,8,10,0.06) 0.5px, transparent 0.5px)',
+        backgroundImage: 'radial-gradient(rgba(8,8,10,0.05) 0.5px, transparent 0.5px)',
         backgroundSize: '26px 26px',
         backgroundPosition: '-1px -1px',
         maskImage: 'radial-gradient(circle at 50% 40%, black 0%, black 50%, transparent 92%)',
@@ -47,16 +47,16 @@ export function HomeBackdrop() {
       >
         <motion.line
           x1="0" y1="1" x2="100%" y2="1"
-          stroke="url(#um-beam-1)" strokeWidth="1"
+          stroke="url(#um-beam-green)" strokeWidth="1"
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: [0, 1, 1, 0] }}
           transition={{ duration: 5.5, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
         />
         <defs>
-          <linearGradient id="um-beam-1" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="rgba(0,194,110,0)" />
-            <stop offset="50%" stopColor="rgba(0,194,110,0.75)" />
-            <stop offset="100%" stopColor="rgba(0,194,110,0)" />
+          <linearGradient id="um-beam-green" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(20,241,149,0)" />
+            <stop offset="50%" stopColor="rgba(20,241,149,0.85)" />
+            <stop offset="100%" stopColor="rgba(20,241,149,0)" />
           </linearGradient>
         </defs>
       </motion.svg>
@@ -65,22 +65,46 @@ export function HomeBackdrop() {
         aria-hidden
         width="100%" height="2"
         style={{
-          position: 'absolute', left: 0, right: 0, top: '72%',
-          pointerEvents: 'none', zIndex: 0, opacity: 0.4,
+          position: 'absolute', left: 0, right: 0, top: '60%',
+          pointerEvents: 'none', zIndex: 0, opacity: 0.45,
         }}
       >
         <motion.line
           x1="100%" y1="1" x2="0" y2="1"
-          stroke="url(#um-beam-2)" strokeWidth="1"
+          stroke="url(#um-beam-purple)" strokeWidth="1"
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: [0, 1, 1, 0] }}
           transition={{ duration: 7, repeat: Infinity, ease: 'linear', repeatDelay: 4, delay: 2.2 }}
         />
         <defs>
-          <linearGradient id="um-beam-2" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="rgba(120,148,255,0)" />
-            <stop offset="50%" stopColor="rgba(120,148,255,0.65)" />
-            <stop offset="100%" stopColor="rgba(120,148,255,0)" />
+          <linearGradient id="um-beam-purple" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(153,69,255,0)" />
+            <stop offset="50%" stopColor="rgba(153,69,255,0.65)" />
+            <stop offset="100%" stopColor="rgba(153,69,255,0)" />
+          </linearGradient>
+        </defs>
+      </motion.svg>
+
+      <motion.svg
+        aria-hidden
+        width="100%" height="2"
+        style={{
+          position: 'absolute', left: 0, right: 0, top: '82%',
+          pointerEvents: 'none', zIndex: 0, opacity: 0.35,
+        }}
+      >
+        <motion.line
+          x1="0" y1="1" x2="100%" y2="1"
+          stroke="url(#um-beam-blue)" strokeWidth="1"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: [0, 1, 1, 0] }}
+          transition={{ duration: 6.5, repeat: Infinity, ease: 'linear', repeatDelay: 4, delay: 4.4 }}
+        />
+        <defs>
+          <linearGradient id="um-beam-blue" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(46,124,255,0)" />
+            <stop offset="50%" stopColor="rgba(46,124,255,0.65)" />
+            <stop offset="100%" stopColor="rgba(46,124,255,0)" />
           </linearGradient>
         </defs>
       </motion.svg>
