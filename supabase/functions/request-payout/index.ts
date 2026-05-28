@@ -243,6 +243,23 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     }
 
     await admin.from('payouts').update({ woovi_payload: wooviData }).eq('id', payout.id)
+
+    // Sandbox auto-confirm: cobranca foi criada de verdade, mas ninguem paga
+    // o QR em sandbox. Pra demo nao travar no polling, confirma local apos 8s.
+    // Prod NAO faz isso — espera webhook real do Woovi.
+    if (WOOVI_MODE === 'sandbox') {
+      setTimeout(async () => {
+        try {
+          await admin.from('payouts').update({
+            status: 'confirmed',
+            endtoend_id: `SANDBOX-${correlationId.slice(0, 8)}`,
+            woovi_payload: { ...wooviData, sandbox_auto_confirmed_at: new Date().toISOString() },
+          }).eq('id', payout.id)
+          console.log('[sandbox] auto-confirmed payout', payout.id)
+        } catch (e) { console.error('[sandbox] auto-confirm failed', e) }
+      }, 8000)
+    }
+
     return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, mode: WOOVI_MODE }, 200, req)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
