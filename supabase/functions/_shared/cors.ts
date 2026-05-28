@@ -1,6 +1,6 @@
 // CORS helper — whitelist por origem pra endpoints autenticados.
 // Webhook é server-to-server (sem browser preflight) e usa `corsHeadersOpen`.
-const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173')
+const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173,https://ubermoney.devfellowship.com')
   .split(',').map((s) => s.trim()).filter(Boolean)
 
 const BASE_HEADERS = {
@@ -11,7 +11,10 @@ const BASE_HEADERS = {
 
 function originFor(req?: Request) {
   const o = req?.headers.get('origin') ?? ''
-  return ALLOWED.includes(o) ? o : (ALLOWED[0] ?? '')
+  if (ALLOWED.includes(o)) return o
+  // Aceita previews Vercel automaticamente (URLs *.vercel.app)
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(o)) return o
+  return ALLOWED[0] ?? ''
 }
 
 export const corsHeaders = BASE_HEADERS
