@@ -2,6 +2,7 @@ import { Screen } from '@/components/atoms/screen'
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { UploadZone } from './_components/upload-zone'
+import { CnhReviewSheet } from './_components/cnh-review-sheet'
 import { useUploadScreen } from './use-upload-screen'
 import type { CnhData, EarningsData, UploadedDocuments } from '@/types/documents'
 
@@ -16,7 +17,7 @@ const renderEarnings = (d: EarningsData) =>
     : 'Lido'
 
 export function UploadScreen({ onDone }: UploadScreenProps) {
-  const { cnh, earnings, loading, err, both, handle } = useUploadScreen()
+  const { cnh, earnings, loading, err, both, handle, cnhReviewOpen, cnhReview, confirmCnh, reuploadCnh } = useUploadScreen()
 
   return (
     <Screen label="02.5 Upload" scroll>
@@ -65,6 +66,13 @@ export function UploadScreen({ onDone }: UploadScreenProps) {
           </div>
         </div>
       </div>
+
+      <CnhReviewSheet
+        open={cnhReviewOpen}
+        data={cnhReview}
+        onConfirm={confirmCnh}
+        onReupload={reuploadCnh}
+      />
     </Screen>
   )
 }

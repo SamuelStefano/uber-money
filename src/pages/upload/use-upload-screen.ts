@@ -13,6 +13,11 @@ interface UseUploadScreenOutput {
   err: string | null
   both: boolean
   handle: (file: File, kind: DocKind) => Promise<void>
+  // Sheet de confirmação da CNH (Samuel: mostrar dados extraídos + botão "está correto?")
+  cnhReviewOpen: boolean
+  cnhReview: CnhData | null
+  confirmCnh: (data: CnhData) => void
+  reuploadCnh: () => void
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -22,23 +27,30 @@ export function useUploadScreen(): UseUploadScreenOutput {
   const [earnings, setEarnings] = useState<EarningsData | null>(null)
   const [loading, setLoading] = useState<DocKind | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [cnhReviewOpen, setCnhReviewOpen] = useState(false)
+  const [cnhReview, setCnhReview] = useState<CnhData | null>(null)
   const toast = useToast()
 
   const handle = useCallback(async (file: File, kind: DocKind) => {
     if (!file) return
     setLoading(kind); setErr(null)
     try {
+      let extracted: CnhData | EarningsData
       if (HAS_BACKEND) {
         const b64 = await fileToBase64(file)
         const result = await processDocument(kind, b64, file.type as AllowedMediaType)
-        if (kind === 'cnh') setCnh(result.ocr_data as CnhData)
-        else setEarnings(result.ocr_data as EarningsData)
-        toast.push(kind === 'cnh' ? 'CNH lida' : 'Extrato lido')
+        extracted = result.ocr_data as CnhData | EarningsData
       } else {
         await sleep(MOCK_OCR_DELAY_MS)
-        if (kind === 'cnh') setCnh(MOCK_OCR_CNH)
-        else setEarnings(MOCK_OCR_EARNINGS)
-        toast.push('Documento lido')
+        extracted = kind === 'cnh' ? MOCK_OCR_CNH : MOCK_OCR_EARNINGS
+      }
+      if (kind === 'cnh') {
+        setCnhReview(extracted as CnhData)
+        setCnhReviewOpen(true)
+        toast.push('CNH lida — confirme os dados')
+      } else {
+        setEarnings(extracted as EarningsData)
+        toast.push('Extrato lido')
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -48,5 +60,23 @@ export function useUploadScreen(): UseUploadScreenOutput {
     }
   }, [toast])
 
-  return { cnh, earnings, loading, err, both: !!cnh && !!earnings, handle }
+  const confirmCnh = useCallback((data: CnhData) => {
+    setCnh(data)
+    setCnhReview(null)
+    setCnhReviewOpen(false)
+    toast.push('CNH confirmada')
+  }, [toast])
+
+  const reuploadCnh = useCallback(() => {
+    setCnh(null)
+    setCnhReview(null)
+    setCnhReviewOpen(false)
+  }, [])
+
+  return {
+    cnh, earnings, loading, err,
+    both: !!cnh && !!earnings,
+    handle,
+    cnhReviewOpen, cnhReview, confirmCnh, reuploadCnh,
+  }
 }
