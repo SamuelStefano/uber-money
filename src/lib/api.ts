@@ -77,6 +77,22 @@ export async function processDocument(kind: DocKind, imageBase64: string, mediaT
   return r.json() as Promise<{ document_id: string; kind: DocKind; ocr_data: any }>
 }
 
+// ─── Credit status (último loan_request do user) ────────────────
+export interface CreditStatus {
+  has_request: boolean
+  score: number | null
+  limit_brl: number | null
+  interest_pct: number | null
+  last_request_at?: string
+  last_status?: string
+}
+
+export async function getCreditStatus(): Promise<CreditStatus> {
+  const r = await authedFetch('get-credit-status', {})
+  if (!r.ok) throw new Error(`get-credit-status: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
 // ─── Loan flow ──────────────────────────────────────────────────
 // DR-001 D3: mapeia IDs do front (pneu/combustivel/...) pro enum loan_reason do backend.
 const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {

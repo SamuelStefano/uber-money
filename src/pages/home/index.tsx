@@ -1,6 +1,7 @@
 import { Screen } from '@/components/atoms/screen'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
+import { useCreditStatus } from '@/hooks/use-credit-status'
 import { greeting } from '@/utils/greeting'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
@@ -16,6 +17,14 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
   const [s] = useStore()
   const balance = useCountUp(s.wallet.balanceBRL, { duration: 1300, initialValue: 0 })
   const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
+  const { credit } = useCreditStatus()
+
+  const scoreCaption = credit.has_request
+    ? 'Calculado a partir dos seus ganhos do Uber'
+    : 'Análise instantânea · sem consulta ao SPC'
+  const limitHint = credit.has_request && credit.interest_pct
+    ? `Juros a partir de ${(credit.interest_pct * 100).toFixed(1)}%/mês`
+    : 'Análise leva segundos · libera USDC na hora'
 
   return (
     <Screen label="02 Home" scroll>
@@ -36,8 +45,8 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
           <RequestCreditCta onClick={onRequestCredit} />
-          <ScoreCard value={78} caption="Pago em dia · ganhos consistentes · 3 anos rodando" />
-          <LimitCard limit={500} hint="Até R$500 por adiantamento · juros a partir de 2,9%/mês" />
+          <ScoreCard value={credit.score} caption={scoreCaption} onUnlock={onRequestCredit} />
+          <LimitCard limit={credit.limit_brl} hint={limitHint} onUnlock={onRequestCredit} />
         </div>
       </div>
     </Screen>
