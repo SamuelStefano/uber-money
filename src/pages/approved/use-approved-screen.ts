@@ -163,6 +163,7 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       setTimeout(() => setShowNotif(false), PIX_NOTIFICATION_DURATION_MS)
       setPhase('done')
     } catch (e) {
+      console.error('[sacar] payout failed:', e)
       toast.push(e instanceof Error ? e.message : 'Pix demorou demais. Tente de novo.')
       setPhase('usdc_received')
     }
