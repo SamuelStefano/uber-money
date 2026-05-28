@@ -192,7 +192,8 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   try {
     const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${WOOVI_API_KEY}`, 'Content-Type': 'application/json' },
+      // Woovi aceita AppID direto no Authorization (sem prefixo Bearer)
+      headers: { 'Authorization': WOOVI_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         correlationID: correlationId,
         value: amountCents,

@@ -46,6 +46,12 @@ serve(async (req) => {
   let payload: Record<string, any>
   try { payload = JSON.parse(raw) } catch { return json({ error: 'Invalid JSON' }, 400) }
 
+  // Teste de webhook do painel Woovi (ping) — não tem correlationID, só responde OK
+  if (payload.evento === 'teste_webhook' || payload.event === 'teste_webhook') {
+    console.log('[woovi-webhook] ping recebido', payload)
+    return json({ received: true, ping: true })
+  }
+
   const transfer = payload.transfer ?? payload.charge ?? payload
   const correlationId: string | undefined = transfer.correlationID ?? transfer.correlationId
   const wooviStatus: string | undefined = transfer.status ?? payload.status

@@ -80,29 +80,39 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
     void run()
   }, [wallet.connected, wallet.publicKey, onLogin, toast, wallet.signMessage, wallet.wallet?.adapter?.name])
 
-  const connect = useCallback(async () => {
+  // Pattern correto pra wallet-adapter com autoConnect=false:
+  // (1) connect() faz só wallet.select('Phantom')
+  // (2) useEffect abaixo dispara wallet.connect() do hook quando provider re-renderiza
+  //     com a wallet selecionada. Chamar adapter.connect() direto não atualiza state.
+  const pendingConnectRef = useRef(false)
+
+  useEffect(() => {
+    if (!pendingConnectRef.current) return
+    if (!wallet.wallet) return                  // ainda não selecionou
+    if (wallet.connected || wallet.connecting) return
+    pendingConnectRef.current = false
+    console.log('[connect] disparando wallet.connect() pra', wallet.wallet.adapter.name)
+    wallet.connect().catch((e) => {
+      console.error('[connect] wallet.connect falhou:', e)
+      toast.push(`Conexão falhou: ${e?.message ?? 'erro desconhecido'}`)
+      setWaiting(false)
+    })
+  }, [wallet, wallet.wallet, wallet.connected, wallet.connecting, toast])
+
+  const connect = useCallback(() => {
     setWaiting(true)
     signedForPubkeyRef.current = null
 
-    // Phantom é detectada via Wallet Standard automático. Tenta conectar direto
-    // (skip modal) se Phantom está no array de wallets. Modal só como fallback.
-    const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
     console.log('[connect] wallets disponíveis:', wallet.wallets.map((w) => w.adapter.name))
+    const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
 
     if (phantom) {
-      try {
-        wallet.select(phantom.adapter.name)
-        // pequeno tick pro React aplicar select antes do connect
-        await new Promise((r) => setTimeout(r, 50))
-        await phantom.adapter.connect()
-        // useEffect dispara signMessage flow quando wallet.connected=true
-      } catch (e) {
-        console.error('[connect] phantom direct failed, fallback to modal:', e)
-        try { setVisible(true) }
-        catch { toast.push('Não foi possível abrir a carteira'); setWaiting(false) }
-      }
+      // Marca intent de conectar e seleciona. useEffect acima dispara connect()
+      // quando o provider re-renderizar com wallet.wallet preenchida.
+      pendingConnectRef.current = true
+      wallet.select(phantom.adapter.name)
     } else {
-      // Phantom não detectada → modal pra user instalar/escolher
+      // Sem Phantom detectada → modal
       try { setVisible(true) }
       catch { toast.push('Phantom não detectada. Instale a extensão.'); setWaiting(false) }
     }

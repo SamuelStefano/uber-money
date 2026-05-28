@@ -47,3 +47,9 @@ supabase/.branches
 
 # SDD spec-driven (gitignored per skill default)
 .sdd/
+
+# Docs internos (alinhamentos, PDFs de status — não publicar)
+docs/pitch/alinhamento-*.html
+docs/pitch/alinhamento-*.pdf
+docs/pitch/integracao-*.html
+docs/pitch/integracao-*.pdf
