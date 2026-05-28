@@ -37,51 +37,65 @@ export type EarningsData = {
   confidence: 'high' | 'medium' | 'low'
 }
 
-const PROMPT_CNH = `Você é um extrator forense de CNH brasileira. Sua leitura será usada pra KYC.
+const PROMPT_CNH = `Você é um extrator forense de CNH brasileira. Sua leitura será usada pra KYC — qualquer erro de dígito invalida o cadastro.
 
-PASSO 1 — VERIFIQUE SE É CNH BRASILEIRA
-Antes de qualquer coisa, classifique o documento. Marque is_cnh=true APENAS se enxergar TODOS estes elementos:
+PASSO 1 — É CNH BRASILEIRA?
+Marque is_cnh=true APENAS se enxergar TODOS:
 - Título "CARTEIRA NACIONAL DE HABILITAÇÃO" ou "CNH" ou "DRIVER LICENSE"
 - Brasão da República Federativa do Brasil
-- Layout verde/amarelo característico (modelo CONTRAN)
-- Campos rotulados em PT-BR/EN/ES (NOME/NAME, CPF, VALIDADE/EXPIRATION)
+- Layout verde/amarelo (CONTRAN)
+- Campos rotulados PT/EN/ES (NOME/NAME, CPF, VALIDADE/EXPIRATION)
 - Foto do condutor
 
-Se for OUTRO tipo de documento (RG, CPF avulso, comprovante, foto qualquer, screenshot aleatório, paisagem, animal, meme), retorne is_cnh=false e descreva em document_type o que realmente é. NÃO invente dados de CNH.
+Se for outro documento (RG, comprovante, paisagem, screenshot, meme), retorne is_cnh=false e descreva em document_type. NÃO invente dados.
 
-PASSO 2 — SE FOR CNH, EXTRAIA OS DADOS
-Estrutura da CNH (modelo CONTRAN 886/2021):
-- Rótulo "NOME / NAME" — nome completo em CAIXA ALTA
-- Rótulo "DOC. IDENTIDADE" — RG (NÃO É CPF; vem com sigla SSP/SP, IFP/RJ etc)
-- Rótulo "CPF" — formato XXX.XXX.XXX-XX
-- Rótulo "DATA NASCIMENTO" — DD/MM/AAAA
-- Rótulo "VALIDADE / EXPIRATION DATE" — DD/MM/AAAA
-- Rótulo "CATEGORIA / CATEGORY" — letra(s) A/B/AB/C/D/E
-- "Nº REGISTRO" — 11 dígitos contíguos em vermelho (NÃO É CPF)
-- "Nº ESPELHO" — 11 dígitos verticais na borda (NÃO É CPF)
+PASSO 2 — ZOOM MENTAL EM CADA CAMPO
+Antes de extrair, imagine que está usando uma lupa virtual. Para CADA campo crítico (CPF, validade, data de nascimento), faça mentalmente:
+a) Localize o RÓTULO exato no documento ("CPF", "VALIDADE", "DATA NASCIMENTO")
+b) Centralize sua atenção visual SOMENTE na região do valor ao lado/abaixo do rótulo
+c) Amplie a região mentalmente — leia cada dígito individualmente
+d) Anote sua leitura
+e) Releia o mesmo campo da DIREITA pra ESQUERDA pra confirmar
+f) Se os dois passes coincidirem, use; senão, releia uma terceira vez
 
-ATENÇÃO: a CNH tem TRÊS números de 11 dígitos. Extraia APENAS o que está sob o rótulo literal "CPF" (com pontos e hífen visíveis).
+PASSO 3 — DIFERENCIAR OS 3 NÚMEROS DE 11 DÍGITOS
+A CNH tem TRÊS números de 11 dígitos:
+- CPF: sob rótulo "CPF", FORMATO XXX.XXX.XXX-XX (com pontos e hífen visíveis)
+- Nº REGISTRO: SEM pontuação, em VERMELHO destaque, ROTULADO "Nº REGISTRO"
+- Nº ESPELHO: VERTICAL na borda esquerda
+Extraia APENAS o do rótulo "CPF". Se não vir o rótulo "CPF" claro, cpf=null.
 
-PROTOCOLO DO CPF:
-1. Localize o rótulo "CPF".
-2. Leia DÍGITO POR DÍGITO da esquerda pra direita.
-3. Cuidado com confusões: 0↔O, 1↔I, 5↔S, 8↔B.
-4. Valide pelo algoritmo módulo 11. Se não bate, releia.
-5. Se mesmo após releitura não bate, cpf=null e confidence=low.
+PASSO 4 — PROTOCOLO ANTI-CONFUSÃO DE DÍGITOS
+0 e O: 0 é mais retangular, O é mais redondo
+1 e I e l: 1 tem topo angular, I é reto
+5 e S: 5 tem ângulos retos, S é curvado
+8 e B: 8 é fechado por loops, B tem barra vertical
+6 e G: 6 é arredondado, G tem horizontal interna
+2 e Z: 2 tem curva no topo, Z é todo angular
+
+PASSO 5 — VALIDAR CPF (MÓDULO 11)
+Aplique o algoritmo:
+- DV1 = soma(D[i] × (10-i)) mod 11, se <2 = 0, senão 11-resultado
+- DV2 = soma(D[i] × (11-i)) mod 11 incluindo DV1
+Se DV1 e DV2 não baterem com os últimos 2 dígitos lidos, RELEIA com mais atenção.
+
+PASSO 6 — VALIDADE: NÃO INVENTE
+Se a região da validade está borrada, parcialmente coberta, ou ilegível, retorne valid_until=null. NUNCA chute ou complete com data plausível.
 
 FORMATO DE SAÍDA (JSON puro, sem markdown):
 {
   "is_cnh": true | false,
-  "document_type": "CNH" ou descrição do que é se não for CNH (ex: "RG", "foto de paisagem", "screenshot", "documento não identificável"),
+  "document_type": "CNH ou descrição do que é se não for CNH",
   "name": "string em CAIXA ALTA ou null",
   "cpf": "XXX.XXX.XXX-XX ou null",
+  "cpf_reading_passes": ["leitura esquerda-direita", "leitura direita-esquerda"],
   "birth_date": "YYYY-MM-DD ou null",
   "valid_until": "YYYY-MM-DD ou null",
   "category": "A|B|AB|C|D|E|AC|AD|AE ou null",
   "confidence": "high|medium|low"
 }
 
-Se is_cnh=false, deixe os outros campos null. NUNCA inclua texto fora do JSON.`
+Se is_cnh=false, outros campos null. NUNCA inclua texto fora do JSON.`
 
 const PROMPT_EARNINGS = `Você é um extrator de "Tela de Ganhos" do app Uber/99 (motorista).
 
@@ -175,51 +189,60 @@ export async function visionExtract<T>(
     return result as unknown as T
   }
 
-  // CNH: pipeline com retry baseado em validação módulo 11
-  console.log('[vision] CNH pass 1: Sonnet')
-  const result = await callClaude<CnhData>({
-    model: PRIMARY_MODEL,
-    prompt: PROMPT_CNH,
-    imageBase64,
-    mediaType,
-    temperature: 0,
-  })
+  // CNH: cross-check Sonnet + Opus em paralelo, vota apenas se ambos concordarem
+  console.log('[vision] CNH cross-check Sonnet + Opus em paralelo')
+  const [sonnet, opus] = await Promise.all([
+    callClaude<CnhData>({ model: PRIMARY_MODEL, prompt: PROMPT_CNH, imageBase64, mediaType, temperature: 0 }),
+    callClaude<CnhData>({ model: RETRY_MODEL,   prompt: PROMPT_CNH, imageBase64, mediaType, temperature: 0 }),
+  ])
 
-  // Gate: foto não é CNH → rejeita explicitamente
-  if (result.is_cnh === false) {
-    const what = result.document_type ?? 'imagem'
+  // Gate: pelo menos um confirma que NÃO é CNH → rejeita
+  if (sonnet.is_cnh === false || opus.is_cnh === false) {
+    const what = (sonnet.is_cnh === false ? sonnet.document_type : opus.document_type) ?? 'imagem'
     console.warn('[vision] não é CNH — detectado:', what)
     throw new NotACnhError(`Detectamos: ${what}. Envie uma foto da CNH brasileira.`)
   }
 
-  const cpfRaw = result.cpf
-  if (cpfRaw && isValidCpf(cpfRaw)) {
-    result.cpf = formatCpf(normalizeCpfDigits(cpfRaw)!)
-    console.log('[vision] CNH pass 1 OK (módulo 11 válido)')
-    return result as unknown as T
+  const sCpf = normalizeCpfDigits(sonnet.cpf)
+  const oCpf = normalizeCpfDigits(opus.cpf)
+  const sValid = sCpf && isValidCpf(sCpf)
+  const oValid = oCpf && isValidCpf(oCpf)
+
+  console.log('[vision] Sonnet CPF:', sCpf, 'válido:', sValid, '— Opus CPF:', oCpf, 'válido:', oValid)
+
+  // Caso ideal: ambos batem E ambos válidos → high confidence
+  if (sValid && oValid && sCpf === oCpf) {
+    console.log('[vision] cross-check OK — Sonnet e Opus concordam')
+    return {
+      ...opus,
+      cpf: formatCpf(sCpf!),
+      confidence: 'high',
+    } as unknown as T
   }
 
-  console.warn('[vision] CNH pass 1 CPF inválido:', cpfRaw, '— retry com Opus')
-  try {
-    const retry = await callClaude<CnhData>({
-      model: RETRY_MODEL,
-      prompt: PROMPT_CNH,
-      imageBase64,
-      mediaType,
-      temperature: 0,
-    })
-    if (retry.is_cnh === false) {
-      throw new NotACnhError(`Detectamos: ${retry.document_type ?? 'imagem'}. Envie uma foto da CNH brasileira.`)
-    }
-    if (retry.cpf && isValidCpf(retry.cpf)) {
-      retry.cpf = formatCpf(normalizeCpfDigits(retry.cpf)!)
-      console.log('[vision] CNH pass 2 OK (módulo 11 válido após Opus)')
-      return retry as unknown as T
-    }
-    return { ...retry, confidence: 'low' } as unknown as T
-  } catch (e) {
-    if (e instanceof NotACnhError) throw e
-    console.error('[vision] CNH pass 2 falhou:', e)
-    return { ...result, confidence: 'low' } as unknown as T
+  // Divergência ou um falha módulo 11: usa o que passa módulo 11 (mas marca medium)
+  if (oValid) {
+    console.warn('[vision] divergência — usando Opus (módulo 11 OK)')
+    return {
+      ...opus,
+      cpf: formatCpf(oCpf!),
+      confidence: 'medium',
+    } as unknown as T
   }
+  if (sValid) {
+    console.warn('[vision] divergência — usando Sonnet (módulo 11 OK)')
+    return {
+      ...sonnet,
+      cpf: formatCpf(sCpf!),
+      confidence: 'medium',
+    } as unknown as T
+  }
+
+  // Nenhum passa módulo 11 — retorna low confidence
+  console.warn('[vision] nenhum passa módulo 11 — confidence low')
+  return {
+    ...opus,
+    cpf: oCpf ? formatCpf(oCpf) : sCpf ? formatCpf(sCpf) : null,
+    confidence: 'low',
+  } as unknown as T
 }
