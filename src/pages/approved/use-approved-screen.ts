@@ -1,17 +1,23 @@
 import { useCallback, useState } from 'react'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed } from '@/lib/api'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, signScore } from '@/lib/api'
+import { buildBorrowerRequestLoanTx } from '@/lib/solana-tx-builder'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
 import { generateConfettiDots, type ConfettiDot } from '@/utils/confetti'
 import { PIX_NOTIFICATION_DURATION_MS } from '@/consts/confetti'
 import type { LoanDecision, PayoutReceipt } from '@/types/domain'
 
-// DR-002 D4: 2-step UX (Q8 TL).
-//   approved  → release  → usdc_received  → sacando  → done
-//                ↑Step 1                     ↑Step 2
+// DR-002 D4 + DR-004 F+: 2-step UX (Q8 TL).
+//   approved  → releasing/signing  → usdc_received  → sacando  → done
+//                ↑Step 1                              ↑Step 2
 type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done'
+
+// VITE_ONCHAIN_FLOW=true → motorista assina via Phantom (DR-004 F+)
+// VITE_ONCHAIN_FLOW=false → admin signa server-side (DR-002 legacy, fallback)
+const ONCHAIN_FLOW = (import.meta.env.VITE_ONCHAIN_FLOW ?? 'true').toLowerCase() === 'true'
 
 interface UseApprovedScreenInput {
   decision: LoanDecision
@@ -51,16 +57,38 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
   const [showNotif, setShowNotif] = useState(false)
   const [confetti, setConfetti] = useState<ConfettiDot[]>([])
   const toast = useToast()
+  const { connection } = useConnection()
+  const wallet = useWallet()
 
-  // Step 1: chama Anchor `release_loan` via edge `request-payout?action=release`
-  // → USDC cai na wallet Solana do borrower (devnet).
-  //
-  // Squad A3 amend: idempotência via `status: 'already_released'` (200, não throw).
-  // Front trata `confirmed | already_released` igual — ambos seguem pra usdc_received.
+  // Step 1: DR-004 F+ — motorista assina via Phantom + Anchor valida on-chain.
   const efetuar = useCallback(async () => {
     setPhase('releasing')
     try {
-      if (HAS_BACKEND && decision.loanId) {
+      if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW && wallet.publicKey && wallet.sendTransaction) {
+        // F+ on-chain flow
+        console.log('[efetuar] onchain flow — pegando attestation do oracle')
+        const att = await signScore(decision.loanId)
+
+        console.log('[efetuar] montando tx (Ed25519 + ATA + borrower_request_loan)')
+        const tx = await buildBorrowerRequestLoanTx({
+          connection,
+          payload: att,
+          borrower: wallet.publicKey,
+        })
+
+        console.log('[efetuar] Phantom popup — assinar tx')
+        const sig = await wallet.sendTransaction(tx, connection)
+        console.log('[efetuar] tx enviada:', sig, '— aguardando confirmação')
+        await connection.confirmTransaction(sig, 'confirmed')
+
+        setRelease({
+          cpfHashHex: att.cpfHashHex,
+          amountUSDC: Number(att.amountUSDC),
+          txRelease: sig,
+        })
+        console.log('[efetuar] ✓ on-chain confirmed', sig)
+      } else if (HAS_BACKEND && decision.loanId) {
+        // Legacy admin-signed
         const r = await releaseLoan(decision.loanId)
         setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })
         if (r.status === 'already_released') {
@@ -72,13 +100,19 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       }
       setPhase('usdc_received')
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
       console.error('[efetuar] release failed:', e)
-      toast.push(e instanceof Error ? e.message : 'Falha ao efetuar empréstimo. Tente de novo.')
+      // User cancelou Phantom popup → silente, volta pro approved
+      if (msg.includes('User rejected') || msg.includes('cancelled')) {
+        setPhase('approved')
+        return
+      }
+      toast.push(msg || 'Falha ao efetuar empréstimo. Tente de novo.')
       setPhase('approved')
     }
-  }, [decision, toast])
+  }, [decision, toast, connection, wallet])
 
-  // Step 2: chama edge `request-payout?action=payout` → Woovi PROD ou MOCK.
+  // Step 2: Woovi sandbox/prod
   const sacar = useCallback(async () => {
     setPhase('sacando')
     try {

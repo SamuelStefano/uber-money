@@ -144,6 +144,28 @@ export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
   return r.json()
 }
 
+// DR-004 F+: oracle assina Ed25519 attestation off-chain. Front leva no payload da tx
+// que motorista assina via Phantom. Programa valida assinatura on-chain.
+export interface ScoreAttestation {
+  loanId: string
+  cpfHashHex: string
+  cpfHashBytes: number[]
+  amountUSDC: string
+  score: number
+  expiresAt: string
+  oraclePubkeyBase58: string
+  oraclePubkeyBytes: number[]
+  signature: number[]
+  messageBytes: number[]
+  borrowerWallet: string
+}
+
+export async function signScore(loanId: string): Promise<ScoreAttestation> {
+  const r = await authedFetch('sign-score', { loanId })
+  if (!r.ok) throw new Error(`sign-score: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
 // Step 2 (DR-002 D5): off-ramp Woovi (PROD ou MOCK conforme env).
 export async function requestPayout(loanId: string, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutResponse> {
   const r = await authedFetch('request-payout', { action: 'payout', loanId, pixKey, pixKeyType })
