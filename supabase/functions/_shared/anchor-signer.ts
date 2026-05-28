@@ -1,8 +1,9 @@
 // DR-003 D7: Anchor signer server-side (raw tx, sem IDL).
-// Constrói + assina + envia tx pra invocar release_loan / admin_disburse.
+// Lightweight version: SEM @solana/spl-token (ATA derivada manualmente) +
+// `?target=denonext` no esm.sh pra reduzir parse no isolate Edge.
 //
-// Sem dependência de @coral-xyz/anchor (IDL build falhou no toolchain).
-// Discriminator computado on-the-fly via sha256("global:<method>").
+// Motivo: estoura WORKER_RESOURCE_LIMIT do isolate Supabase Edge se carregar
+// @solana/spl-token completo (Token-2022 + extensions pesam ~300KB extras).
 import {
   Connection,
   Keypair,
@@ -10,16 +11,18 @@ import {
   SystemProgram,
   Transaction,
   TransactionInstruction,
-} from 'https://esm.sh/@solana/web3.js@1.95.3'
-import {
-  TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccountIdempotentInstruction,
-} from 'https://esm.sh/@solana/spl-token@0.4.8'
+} from 'https://esm.sh/@solana/web3.js@1.95.3?target=denonext'
+
+// Re-export pra edges consumirem PublicKey via anchor-signer (1 fetch a menos)
+export { PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3?target=denonext'
 
 const PROGRAM_ID = new PublicKey(Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N')
 const USDC_MINT = new PublicKey(Deno.env.get('USDC_MINT_DEVNET') ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 const RPC_URL = Deno.env.get('SOLANA_RPC_URL') ?? 'https://api.devnet.solana.com'
+
+// Constantes do SPL Token program (substituem @solana/spl-token)
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
 
 const LOAN_SEED = new TextEncoder().encode('loan')
 const VAULT_SEED = new TextEncoder().encode('vault')
@@ -32,8 +35,7 @@ export async function methodDiscriminator(name: string): Promise<Uint8Array> {
 export function loadAdminKeypair(): Keypair {
   const raw = Deno.env.get('SOLANA_ADMIN_KEYPAIR_JSON')
   if (!raw) throw new Error('SOLANA_ADMIN_KEYPAIR_JSON env missing')
-  const bytes = Uint8Array.from(JSON.parse(raw))
-  return Keypair.fromSecretKey(bytes)
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)))
 }
 
 export function connection(): Connection {
@@ -46,6 +48,33 @@ export function deriveLoanPda(cpfHash: Uint8Array): [PublicKey, number] {
 
 export function deriveVaultPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([VAULT_SEED], PROGRAM_ID)
+}
+
+// ATA derivation manual — substitui getAssociatedTokenAddress do spl-token.
+// Seeds: [owner, TOKEN_PROGRAM_ID, mint] under ASSOCIATED_TOKEN_PROGRAM_ID.
+function deriveAta(owner: PublicKey, mint: PublicKey): PublicKey {
+  const [ata] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )
+  return ata
+}
+
+// Idempotent ATA create instruction — substitui createAssociatedTokenAccountIdempotentInstruction.
+// Discriminator do instruction: byte 0x01 (Idempotent vs 0x00 que é throw-if-exists).
+function createAtaIdempotentIx(payer: PublicKey, ata: PublicKey, owner: PublicKey, mint: PublicKey): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: new Uint8Array([1]), // 0x01 = CreateIdempotent
+  })
 }
 
 function u64ToBytesLE(n: bigint): Uint8Array {
@@ -71,7 +100,6 @@ interface VaultState {
 async function fetchVaultState(conn: Connection, vault: PublicKey): Promise<VaultState> {
   const acc = await conn.getAccountInfo(vault)
   if (!acc) throw new Error(`Vault account not found at ${vault.toBase58()}`)
-  // Anchor account layout: 8B discriminator + [authority 32, usdc_mint 32, token_account 32, total_released 8, bump 1]
   const data = acc.data.slice(8)
   return {
     authority: new PublicKey(data.slice(0, 32)),
@@ -89,8 +117,6 @@ export interface ReleaseLoanArgs {
   borrower: PublicKey
 }
 
-/// Calls `release_loan(cpf_hash, amount, score)` via raw tx + admin signature.
-/// Returns tx signature on success.
 export async function releaseLoan(args: ReleaseLoanArgs): Promise<string> {
   if (args.cpfHash.length !== 32) throw new Error('cpfHash must be 32 bytes')
 
@@ -99,15 +125,9 @@ export async function releaseLoan(args: ReleaseLoanArgs): Promise<string> {
   const [vault] = deriveVaultPda()
   const [loan] = deriveLoanPda(args.cpfHash)
   const vaultState = await fetchVaultState(conn, vault)
-  const borrowerAta = await getAssociatedTokenAddress(USDC_MINT, args.borrower)
+  const borrowerAta = deriveAta(args.borrower, USDC_MINT)
 
-  // CRIT-3 fix (squad A2 amend): idempotent ATA create.
-  // - Sem getAccountInfo (1 RPC a menos)
-  // - Sem race condition (idempotent = no-op se ATA existe entre check & send)
-  // - Admin paga rent (~0.002 SOL) só quando precisa criar
-  const ataPreIx = createAssociatedTokenAccountIdempotentInstruction(
-    admin.publicKey, borrowerAta, args.borrower, USDC_MINT,
-  )
+  const ataPreIx = createAtaIdempotentIx(admin.publicKey, borrowerAta, args.borrower, USDC_MINT)
 
   const disc = await methodDiscriminator('release_loan')
   const data = new Uint8Array(disc.length + 32 + 8 + 2)

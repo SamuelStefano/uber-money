@@ -84,11 +84,10 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
   if (!userRow2?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
 
   try {
-    // Lazy-load Anchor signer + PublicKey só nesse caminho (cold-start friendly)
-    const [{ releaseLoan: anchorReleaseLoan }, { PublicKey }] = await Promise.all([
-      import('../_shared/anchor-signer.ts'),
-      import('https://esm.sh/@solana/web3.js@1.95.3'),
-    ])
+    // Lazy-load (cold-start friendly). anchor-signer.ts já importa PublicKey
+    // de @solana/web3.js?target=denonext, então só precisamos do export dele.
+    const { releaseLoan: anchorReleaseLoan, PublicKey } = await import('../_shared/anchor-signer.ts') as
+      typeof import('../_shared/anchor-signer.ts') & { PublicKey: typeof import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext').PublicKey }
     const txSig = await anchorReleaseLoan({
       cpfHash,
       amount: amountUSDC,
