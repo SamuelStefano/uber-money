@@ -154,12 +154,32 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 
   const { data: existing } = await admin
     .from('payouts')
-    .select('id, status')
+    .select('id, status, amount_brl, woovi_correlation_id')
     .eq('loan_id', body.loanId)
     .eq('kind', 'release')
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
-  if (existing) return json({ error: `Payout already ${existing.status}`, payoutId: existing.id }, 409, req)
+  if (existing) {
+    // Idempotente: devolve o existente. Se ainda pending em sandbox, agenda auto-confirm.
+    if (existing.status === 'pending' && WOOVI_MODE === 'sandbox') {
+      setTimeout(async () => {
+        try {
+          await admin.from('payouts').update({
+            status: 'confirmed',
+            endtoend_id: `SANDBOX-${(existing.woovi_correlation_id ?? existing.id).slice(0, 8)}`,
+          }).eq('id', existing.id).eq('status', 'pending')
+        } catch (e) { console.error('[sandbox] retry auto-confirm failed', e) }
+      }, 3000)
+    }
+    return json({
+      payoutId: existing.id,
+      status: existing.status,
+      correlationId: existing.woovi_correlation_id ?? '',
+      amountBRL: Number(existing.amount_brl),
+      mode: WOOVI_MODE,
+      resumed: true,
+    }, 200, req)
+  }
 
   const correlationId = crypto.randomUUID()
 
