@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, signScore } from '@/lib/api'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, signScore, type PixKeyType } from '@/lib/api'
 import { buildBorrowerRequestLoanTx } from '@/lib/solana-tx-builder'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
@@ -38,12 +38,15 @@ interface UseApprovedScreenOutput {
   showNotif: boolean
   confetti: ConfettiDot[]
   efetuar: () => Promise<void>           // Step 1: USDC on-chain
-  sacar: () => Promise<void>             // Step 2: Pix
+  sacar: () => void                      // Step 2: abre modal Pix
+  showPixModal: boolean
+  closePixModal: () => void
+  confirmPix: (pixKey: string, pixKeyType: PixKeyType) => Promise<void>
 }
 
-async function executePayout(decision: LoanDecision, pixKey: string): Promise<PayoutReceipt> {
+async function executePayout(decision: LoanDecision, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutReceipt> {
   if (HAS_BACKEND && decision.loanId) {
-    const r = await requestPayout(decision.loanId, pixKey, 'email')
+    const r = await requestPayout(decision.loanId, pixKey, pixKeyType)
     // Sandbox/mock confirma sync — fabrica receipt sem polling (RLS pode bloquear leitura).
     if (r.status === 'confirmed') {
       return {
@@ -137,14 +140,19 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
     }
   }, [decision, toast, connection, wallet])
 
-  // Step 2: Woovi sandbox/prod
-  const sacar = useCallback(async () => {
+  // Step 2: abre modal pra pegar chave Pix
+  const [showPixModal, setShowPixModal] = useState(false)
+  const sacar = useCallback(() => { setShowPixModal(true) }, [])
+  const closePixModal = useCallback(() => { setShowPixModal(false) }, [])
+
+  const confirmPix = useCallback(async (pixKey: string, pixKeyType: PixKeyType) => {
+    setShowPixModal(false)
     setPhase('sacando')
     try {
-      const r = await executePayout(decision, Store.get().wallet.pixKey)
+      const r = await executePayout(decision, pixKey, pixKeyType)
       Store.set((s) => ({
         ...s,
-        wallet: { ...s.wallet, balanceBRL: s.wallet.balanceBRL + decision.approvedAmountBRL },
+        wallet: { ...s.wallet, balanceBRL: s.wallet.balanceBRL + decision.approvedAmountBRL, pixKey },
         activity: [
           {
             id: r.id,
@@ -183,5 +191,6 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
     showReceipt, setShowReceipt,
     showNotif, confetti,
     efetuar, sacar,
+    showPixModal, closePixModal, confirmPix,
   }
 }

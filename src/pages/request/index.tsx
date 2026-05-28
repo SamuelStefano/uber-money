@@ -37,6 +37,27 @@ export function RequestScreen({ onSubmit, onBack }: RequestScreenProps) {
         <AmountPicker value={r.amount} onChange={r.setAmount} />
         <ReasonPicker value={r.reason} onChange={r.setReason} />
 
+        {r.reason === 'outro' && (
+          <div style={{ marginTop: 16 }}>
+            <input
+              type="text"
+              value={r.otherText}
+              onChange={(e) => r.setOtherText(e.target.value.slice(0, 80))}
+              placeholder="Conta pra gente — ex: conta de luz, mercado…"
+              maxLength={80}
+              style={{
+                width: '100%', padding: '14px 18px', borderRadius: 16,
+                border: '1px solid var(--line)', background: '#fff',
+                fontSize: 15, fontWeight: 500, outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mute)', textAlign: 'right' }}>
+              {r.otherText.length}/80
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: 36, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <Button variant="accent" size="lg" disabled={!r.valid} onClick={r.submit} icon={<Icon.ArrowRight />} style={{ minWidth: 280 }}>
             Pedir agora

@@ -11,6 +11,8 @@ interface UseRequestScreenOutput {
   setAmount: (n: number) => void
   reason: LoanReasonId
   setReason: (r: LoanReasonId) => void
+  otherText: string
+  setOtherText: (s: string) => void
   valid: boolean
   submit: () => void
 }
@@ -18,10 +20,12 @@ interface UseRequestScreenOutput {
 export function useRequestScreen({ onSubmit }: UseRequestScreenInput): UseRequestScreenOutput {
   const [amount, setAmount] = useState(AMOUNT_DEFAULT)
   const [reason, setReason] = useState<LoanReasonId>('pneu')
+  const [otherText, setOtherText] = useState('')
 
   const valid = useMemo(
-    () => amount >= AMOUNT_MIN && amount <= AMOUNT_MAX && !!reason,
-    [amount, reason],
+    () => amount >= AMOUNT_MIN && amount <= AMOUNT_MAX && !!reason
+      && (reason !== 'outro' || otherText.trim().length >= 3),
+    [amount, reason, otherText],
   )
 
   const submit = useCallback(() => {
@@ -29,5 +33,5 @@ export function useRequestScreen({ onSubmit }: UseRequestScreenInput): UseReques
     onSubmit({ amountBRL: amount, reason })
   }, [valid, amount, reason, onSubmit])
 
-  return { amount, setAmount, reason, setReason, valid, submit }
+  return { amount, setAmount, reason, setReason, otherText, setOtherText, valid, submit }
 }

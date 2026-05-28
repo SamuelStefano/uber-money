@@ -5,6 +5,7 @@ import { useApprovedScreen } from './use-approved-screen'
 import { ApprovedHero } from './_components/approved-hero'
 import { ConfettiLayer } from './_components/confetti-layer'
 import { PixNotification } from './_components/pix-notification'
+import { PixKeyModal } from './_components/pix-key-modal'
 import type { LoanDecision } from '@/types/domain'
 
 interface ApprovedScreenProps {
@@ -38,6 +39,13 @@ export function ApprovedScreen({ decision, onHome }: ApprovedScreenProps) {
         <Sheet open={a.showReceipt} onClose={() => a.setShowReceipt(false)}>
           {a.receipt && <Receipt receipt={a.receipt} decision={decision} onClose={() => a.setShowReceipt(false)} />}
         </Sheet>
+
+        <PixKeyModal
+          open={a.showPixModal}
+          onClose={a.closePixModal}
+          onConfirm={a.confirmPix}
+          amountBRL={decision.approvedAmountBRL}
+        />
       </div>
     </Screen>
   )

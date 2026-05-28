@@ -76,38 +76,64 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
         </div>
       )}
 
-      <div style={{ marginTop: 44, display: 'flex', gap: 12, justifyContent: 'center' }}>
+      <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
         {phase === 'approved' || phase === 'releasing' ? (
-          <Button
-            variant="accent"
-            size="lg"
-            loading={phase === 'releasing'}
-            onClick={onEfetuar}
-            icon={<Icon.CheckCircle />}
-            style={{ minWidth: 280 }}
-          >
-            {phase === 'releasing' ? 'Efetuando on-chain…' : 'Efetuar empréstimo'}
-          </Button>
-        ) : phase === 'usdc_received' || phase === 'sacando' ? (
-          <Button
-            variant="accent"
-            size="lg"
-            loading={phase === 'sacando'}
-            onClick={onSacar}
-            icon={<Icon.Pix />}
-            style={{ minWidth: 280 }}
-          >
-            {phase === 'sacando' ? 'Enviando Pix…' : 'Sacar como Pix'}
-          </Button>
-        ) : (
           <>
+            <Button
+              variant="accent"
+              size="lg"
+              loading={phase === 'releasing'}
+              onClick={onEfetuar}
+              icon={<Icon.CheckCircle />}
+              style={{ minWidth: 280 }}
+            >
+              {phase === 'releasing' ? 'Efetuando on-chain…' : 'Efetuar empréstimo'}
+            </Button>
+            {phase === 'approved' && (
+              <button
+                onClick={onHome}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 13, color: 'var(--mute)', fontWeight: 500, padding: '6px 12px',
+                }}
+              >
+                Voltar à home
+              </button>
+            )}
+          </>
+        ) : phase === 'usdc_received' || phase === 'sacando' ? (
+          <>
+            <Button
+              variant="accent"
+              size="lg"
+              loading={phase === 'sacando'}
+              onClick={onSacar}
+              icon={<Icon.Pix />}
+              style={{ minWidth: 280 }}
+            >
+              {phase === 'sacando' ? 'Enviando Pix…' : 'Sacar como Pix'}
+            </Button>
+            {phase === 'usdc_received' && (
+              <button
+                onClick={onHome}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 13, color: 'var(--mute)', fontWeight: 500, padding: '6px 12px',
+                }}
+              >
+                Sacar depois · voltar à home
+              </button>
+            )}
+          </>
+        ) : (
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <Button variant="primary" size="lg" onClick={onShowReceipt} icon={<Icon.CheckCircle />} style={{ minWidth: 220 }}>
               Ver comprovante
             </Button>
             <Button variant="secondary" size="lg" onClick={onHome} style={{ minWidth: 220 }}>
               Voltar pro início
             </Button>
-          </>
+          </div>
         )}
       </div>
     </div>
