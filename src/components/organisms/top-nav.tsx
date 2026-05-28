@@ -26,7 +26,9 @@ export function TopNav() {
       <header style={{
         height: 64, flexShrink: 0, padding: '0 32px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1px solid var(--line)', background: '#fff',
+        borderBottom: '1px solid var(--line)',
+        background: 'rgba(252,250,246,0.85)', backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
         position: 'relative', zIndex: 100,
       }}>
         <button
