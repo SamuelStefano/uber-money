@@ -214,8 +214,8 @@ recursos específicos de cada projeto ficam em schemas próprios
   <tr><td><code>WALLET_JWT_SECRET</code></td><td>HS256 do JWT custom mintado por <code>wallet-auth</code></td></tr>
   <tr><td><code>WALLET_UUID_NAMESPACE</code></td><td>Namespace UUID v5 (derivação determinística <code>wallet→user_id</code>)</td></tr>
   <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Claude Vision (modelo claude-haiku-4-5)</td></tr>
-  <tr><td><code>WOOVI_API_KEY</code></td><td>Bearer auth contra <code>api.openpix.com.br</code></td></tr>
-  <tr><td><code>WOOVI_API_URL</code></td><td>Default <code>https://api.openpix.com.br/api/v1</code></td></tr>
+  <tr><td><code>WOOVI_API_KEY</code></td><td>AppID direto no header <code>Authorization</code> — <strong>SEM</strong> prefixo <code>Bearer</code>. Sandbox e prod usam o mesmo formato, AppIDs distintos.</td></tr>
+  <tr><td><code>WOOVI_API_URL</code></td><td>Por ambiente — sandbox: <code>https://api.woovi-sandbox.com/api/v1</code> · prod: <code>https://api.woovi.com/api/v1</code></td></tr>
   <tr><td><code>WOOVI_WEBHOOK_SECRET</code></td><td>HMAC-SHA256 dos webhooks Woovi</td></tr>
   <tr><td><code>WOOVI_MODE</code></td><td><code>mock</code> | <code>prod</code> — controla fallback do Pix</td></tr>
   <tr><td><code>PAYOUT_MAX_BRL</code></td><td>Cap por payout (default 10, ajustável por projeto)</td></tr>
@@ -229,6 +229,15 @@ recursos específicos de cada projeto ficam em schemas próprios
   <code>SUPABASE_*</code>. Por isso o JWT secret tem nome
   <code>WALLET_JWT_SECRET</code> (não <code>SUPABASE_JWT_SECRET</code>).
   O valor é a string raw do dashboard (não decodificar base64).
+</div>
+
+<div class="callout warn">
+  <strong>Errata Woovi (atualizada 28/05 12h):</strong> NÃO usar <code>https://api.openpix.com.br/api/v1</code> — domínio legacy, retorna <code>"appID inválido"</code> com AppIDs novos. URLs corretas:
+  <ul style="margin: 6px 0 0 18px;">
+    <li>Sandbox: <code>https://api.woovi-sandbox.com/api/v1</code></li>
+    <li>Prod: <code>https://api.woovi.com/api/v1</code></li>
+  </ul>
+  Auth: AppID direto em <code>Authorization</code> <strong>SEM</strong> prefixo <code>Bearer</code>. Confirmado contra spec OpenAPI oficial e smoke real em 28/05.
 </div>
 
 <!-- 3. Tabelas -->
