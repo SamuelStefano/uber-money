@@ -4,7 +4,7 @@ import { useToast } from '@/components/organisms/toast-provider'
 import { MOCK_OCR_CNH, MOCK_OCR_EARNINGS, MOCK_OCR_DELAY_MS } from '@/consts/mock'
 import type { CnhData, EarningsData, DocKind } from '@/types/documents'
 
-type AllowedMediaType = 'image/jpeg' | 'image/png' | 'image/webp'
+type AllowedMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf'
 
 interface UseUploadScreenOutput {
   cnh: CnhData | null

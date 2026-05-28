@@ -42,7 +42,7 @@ export function UploadZone<T>({ label, hint, onFile, loading, result, renderResu
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         hidden
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }}
       />

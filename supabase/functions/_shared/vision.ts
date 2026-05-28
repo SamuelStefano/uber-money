@@ -49,31 +49,45 @@ Analise o screenshot e retorne APENAS um JSON válido (sem markdown):
 Se a imagem não for uma tela de ganhos, retorne valores null e confidence="low".`,
 }
 
+export type VisionMediaType =
+  | 'image/jpeg' | 'image/png' | 'image/webp'
+  | 'application/pdf'
+
 export async function visionExtract<T>(
   kind: 'cnh' | 'earnings',
   imageBase64: string,
-  mediaType: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg',
+  mediaType: VisionMediaType = 'image/jpeg',
 ): Promise<T> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
 
+  // Claude API: PDF usa content type `document` com header `anthropic-beta: pdfs-2024-09-25`.
+  // Imagem usa content type `image` direto.
+  const isPdf = mediaType === 'application/pdf'
+  const content = isPdf
+    ? [
+        { type: 'document', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+        { type: 'text', text: PROMPTS[kind] },
+      ]
+    : [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+        { type: 'text', text: PROMPTS[kind] },
+      ]
+
+  const headers: Record<string, string> = {
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'content-type': 'application/json',
+  }
+  if (isPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25'
+
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
-          { type: 'text', text: PROMPTS[kind] },
-        ],
-      }],
+      messages: [{ role: 'user', content }],
     }),
   })
 
