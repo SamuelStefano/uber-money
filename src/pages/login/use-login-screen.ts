@@ -80,13 +80,33 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
     void run()
   }, [wallet.connected, wallet.publicKey, onLogin, toast, wallet.signMessage, wallet.wallet?.adapter?.name])
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     setWaiting(true)
-    // Reset guard: novo clique no botão = libera nova assinatura mesmo pra mesma wallet
     signedForPubkeyRef.current = null
-    try { setVisible(true) }
-    catch { toast.push('Não foi possível abrir a carteira'); setWaiting(false) }
-  }, [setVisible, toast])
+
+    // Phantom é detectada via Wallet Standard automático. Tenta conectar direto
+    // (skip modal) se Phantom está no array de wallets. Modal só como fallback.
+    const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
+    console.log('[connect] wallets disponíveis:', wallet.wallets.map((w) => w.adapter.name))
+
+    if (phantom) {
+      try {
+        wallet.select(phantom.adapter.name)
+        // pequeno tick pro React aplicar select antes do connect
+        await new Promise((r) => setTimeout(r, 50))
+        await phantom.adapter.connect()
+        // useEffect dispara signMessage flow quando wallet.connected=true
+      } catch (e) {
+        console.error('[connect] phantom direct failed, fallback to modal:', e)
+        try { setVisible(true) }
+        catch { toast.push('Não foi possível abrir a carteira'); setWaiting(false) }
+      }
+    } else {
+      // Phantom não detectada → modal pra user instalar/escolher
+      try { setVisible(true) }
+      catch { toast.push('Phantom não detectada. Instale a extensão.'); setWaiting(false) }
+    }
+  }, [wallet, setVisible, toast])
 
   return { waiting, connecting: wallet.connecting, connect }
 }

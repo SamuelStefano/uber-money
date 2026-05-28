@@ -18,13 +18,22 @@ export function supabase(): SupabaseClient {
 
 const fnUrl = (name: string) => `${SUPABASE_URL}/functions/v1/${name}`
 
+// JWT mintado por wallet-auth é custom (sem session em auth.sessions).
+// Supabase JS `setSession` rejeita silenciosamente esse token, então armazenamos
+// em memória aqui e usamos no authedFetch.
+let _walletAccessToken: string | null = null
+export function setWalletAccessToken(token: string | null) { _walletAccessToken = token }
+export function getWalletAccessToken(): string | null { return _walletAccessToken }
+
 async function authedFetch(path: string, body: unknown): Promise<Response> {
-  const sess = (await supabase().auth.getSession()).data.session
+  const token = _walletAccessToken
+    || (await supabase().auth.getSession()).data.session?.access_token
+    || SUPABASE_ANON_KEY
   return fetch(fnUrl(path), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${sess?.access_token ?? SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
   })
@@ -50,7 +59,11 @@ export async function verifyWallet(wallet: string, nonce: string, signatureB58: 
   if (!r.ok) throw new Error(`verify: ${r.status} ${await r.text()}`)
   const data = await r.json()
   if (data.access_token) {
-    await supabase().auth.setSession({ access_token: data.access_token, refresh_token: '' })
+    setWalletAccessToken(data.access_token)
+    // Best-effort setSession (Supabase JS pode rejeitar — não bloqueante)
+    try {
+      await supabase().auth.setSession({ access_token: data.access_token, refresh_token: '' })
+    } catch (_) { /* ignore — usamos _walletAccessToken como fonte da verdade */ }
   }
   return data
 }

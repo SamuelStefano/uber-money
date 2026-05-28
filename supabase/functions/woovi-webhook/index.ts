@@ -6,6 +6,9 @@ import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
+// ⚠️ Skip HMAC só pra sandbox enquanto não temos o secret no painel.
+// NUNCA ativar em prod — qualquer chamada externa fica aceita.
+const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
 
 async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
@@ -24,15 +27,21 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return handleOptions()
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  // Fail-closed: sem secret = misconfigured (review HIGH-6)
-  if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
-
   const raw = await req.text()
-  const sig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
-  if (!sig) return json({ error: 'Missing signature' }, 401)
 
-  const ok = await verifyHmac(raw, sig, WEBHOOK_SECRET)
-  if (!ok) return json({ error: 'Invalid signature' }, 403)
+  if (INSECURE_MODE) {
+    // Sandbox temp: aceita sem HMAC. Loga headers pra capturar o formato Woovi sandbox.
+    const headers: Record<string, string> = {}
+    req.headers.forEach((v, k) => { headers[k] = v })
+    console.warn('[woovi-webhook] INSECURE_MODE=true (sandbox)', { headers, bodyPreview: raw.slice(0, 300) })
+  } else {
+    // Fail-closed em prod: sem secret = misconfigured
+    if (!WEBHOOK_SECRET) return json({ error: 'Webhook misconfigured (missing WOOVI_WEBHOOK_SECRET)' }, 500)
+    const sig = req.headers.get('x-webhook-signature') ?? req.headers.get('x-openpix-signature') ?? ''
+    if (!sig) return json({ error: 'Missing signature' }, 401)
+    const ok = await verifyHmac(raw, sig, WEBHOOK_SECRET)
+    if (!ok) return json({ error: 'Invalid signature' }, 403)
+  }
 
   let payload: Record<string, any>
   try { payload = JSON.parse(raw) } catch { return json({ error: 'Invalid JSON' }, 400) }

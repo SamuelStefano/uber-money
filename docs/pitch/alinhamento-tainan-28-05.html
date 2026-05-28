@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Uber Money — Alinhamento Tainan · 28/05/2026</title>
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    margin: 0; padding: 24px;
+    background: #fafaf8;
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  header {
+    border-bottom: 3px solid #00c26e;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  h1 { color: #04140b; font-size: 28px; margin: 0 0 6px; }
+  .subtitle { color: #666; font-size: 14px; margin: 0; }
+  .pill {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #00c26e;
+    color: white;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .pill.yellow { background: #f5a623; }
+  .pill.red { background: #e74c3c; }
+  .pill.blue { background: #3498db; }
+  .pill.gray { background: #95a5a6; }
+  h2 {
+    color: #04140b;
+    font-size: 20px;
+    margin: 32px 0 12px;
+    border-left: 4px solid #00c26e;
+    padding-left: 12px;
+  }
+  h3 {
+    color: #1a1a1a;
+    font-size: 16px;
+    margin: 20px 0 8px;
+  }
+  .card {
+    background: white;
+    border-radius: 10px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+    border-left: 4px solid #ddd;
+  }
+  .card.done { border-left-color: #00c26e; }
+  .card.progress { border-left-color: #f5a623; }
+  .card.pending { border-left-color: #95a5a6; }
+  .card.risk { border-left-color: #e74c3c; }
+  .card.question { border-left-color: #3498db; }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .card-title { font-weight: 600; font-size: 15px; margin: 0; }
+  .card p { margin: 6px 0; font-size: 14px; color: #444; }
+  .card .meta { font-size: 12px; color: #888; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  th {
+    background: #04140b;
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  td {
+    padding: 10px 14px;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+    vertical-align: top;
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .summary-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .summary-card .num {
+    font-size: 26px;
+    font-weight: 700;
+    color: #04140b;
+  }
+  .summary-card .label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+  .summary-card.done .num { color: #00c26e; }
+  .summary-card.progress .num { color: #f5a623; }
+  .summary-card.pending .num { color: #95a5a6; }
+  .summary-card.risk .num { color: #e74c3c; }
+  code, .mono {
+    font-family: "SF Mono", Monaco, Menlo, monospace;
+    font-size: 12px;
+    background: #f0f0ef;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .tx-link {
+    display: inline-block;
+    font-family: monospace;
+    font-size: 11px;
+    color: #3498db;
+    word-break: break-all;
+  }
+  .timeline {
+    margin: 16px 0;
+  }
+  .timeline-item {
+    display: flex;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .timeline-date {
+    flex: 0 0 90px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #04140b;
+  }
+  .timeline-content {
+    flex: 1;
+    font-size: 13px;
+  }
+  .glossary {
+    background: #fffceb;
+    border: 1px solid #f5d93a;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  .glossary h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #7a6500;
+  }
+  .glossary dt {
+    font-weight: 600;
+    color: #04140b;
+    margin-top: 6px;
+  }
+  .glossary dd {
+    margin: 2px 0 0 0;
+    color: #555;
+  }
+  footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+  }
+  @media print {
+    body { background: white; padding: 0; }
+    .card, .summary-card, table { break-inside: avoid; }
+    h2 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💸 Uber Money — Alinhamento</h1>
+  <p class="subtitle">Quinta-feira · 28/05/2026 · 5 dias até o pitch presencial · Samuel Stefano</p>
+</header>
+
+<!-- ─── RESUMO EXECUTIVO ─── -->
+<div class="summary">
+  <div class="summary-card done">
+    <div class="num">22</div>
+    <div class="label">Tarefas feitas</div>
+  </div>
+  <div class="summary-card progress">
+    <div class="num">3</div>
+    <div class="label">Em progresso</div>
+  </div>
+  <div class="summary-card pending">
+    <div class="num">5</div>
+    <div class="label">Pendentes</div>
+  </div>
+  <div class="summary-card risk">
+    <div class="num">3</div>
+    <div class="label">Dúvidas / decisões</div>
+  </div>
+</div>
+
+<h2>🎯 Onde estamos hoje</h2>
+<div class="card done">
+  <p><strong>Gate EOD 27/05 atingido com folga.</strong> O programa Uber Money está <strong>rodando ao vivo na Solana devnet</strong>, com vault de 20 USDC fundado e teste real de empréstimo já confirmado on-chain. Backend Supabase 100% deployado. Front rodando local em http://178.156.191.231:5173 — agora começando o teste end-to-end manual.</p>
+  <p class="meta">📍 Aproximadamente <strong>75% do MVP fechado</strong>. Falta polish + integração Pix real + vídeo do pitch.</p>
+</div>
+
+<!-- ─── O QUE JÁ FOI FEITO ─── -->
+<h2>✅ O que já foi feito</h2>
+
+<h3>🔗 On-chain (Solana devnet) — funcionando</h3>
+<table>
+  <tr>
+    <th style="width: 38%">Item</th>
+    <th>O que significa pro projeto</th>
+  </tr>
+  <tr>
+    <td><strong>Contrato Anchor deployado</strong><br><span class="mono">6m2ipc...sq2N</span></td>
+    <td>O "cofre digital" e a regra de empréstimo estão publicados na Solana. Pode chamar e movimentar dinheiro.</td>
+  </tr>
+  <tr>
+    <td><strong>Vault inicializado com 20 USDC</strong></td>
+    <td>O cofre tem saldo real (USDC oficial Circle) pra distribuir empréstimos no demo. Cap de R$10 user-facing + 10 USDC on-chain (defense-in-depth).</td>
+  </tr>
+  <tr>
+    <td><strong>1ª transação real de empréstimo</strong><br><span class="mono">2TyJsk...vB9j</span></td>
+    <td>Já provamos que o fluxo funciona: 1 USDC saiu do cofre pra carteira teste. Aparece no Solana Explorer.</td>
+  </tr>
+  <tr>
+    <td><strong>2ª transação (caminho Chainlink mock)</strong><br><span class="mono">3jY9w3...FeYiu</span></td>
+    <td>Versão "alternativa" que simula o callback do Chainlink CCIP — declarada honestamente como mock, mas com assinatura compatível com a versão real.</td>
+  </tr>
+</table>
+
+<h3>🔐 Anti-fraude e LGPD</h3>
+<div class="card done">
+  <p><strong>Hash de CPF on-chain (Q5 plan v9):</strong> implementado com "pepper" único por motorista — significa que mesmo se alguém vazar os hashes, não dá pra descobrir o CPF original facilmente. <strong>Pseudonimização art. 13 §4º da LGPD</strong>, defensável no pitch.</p>
+  <p><strong>1 empréstimo por CPF:</strong> garantido em 2 camadas — on-chain (impossível abrir 2x) + off-chain (constraint no banco).</p>
+</div>
+
+<h3>🖥️ Backend Supabase — deployado</h3>
+<table>
+  <tr><th style="width: 38%">Serviço</th><th>Função</th></tr>
+  <tr><td><code>wallet-auth</code></td><td>Motorista conecta Phantom, assina mensagem, recebe "passaporte" (JWT) pro app</td></tr>
+  <tr><td><code>process-document</code></td><td>Sobe foto da CNH → IA do Claude lê os dados (CPF, nome, validade)</td></tr>
+  <tr><td><code>parse-uber-print</code></td><td>Sobe print do app Uber → extrai renda/corridas (stub mockado por enquanto, Will pode ajudar)</td></tr>
+  <tr><td><code>request-loan</code></td><td>Calcula score do motorista, cria pedido de empréstimo</td></tr>
+  <tr><td><code>request-payout</code></td><td>2 modos: <strong>Efetuar</strong> (manda USDC pra wallet) e <strong>Sacar Pix</strong> (manda dinheiro pro banco). Tem modo mock pra demo segura.</td></tr>
+  <tr><td><code>woovi-webhook</code></td><td>Recebe confirmação do Pix da Woovi</td></tr>
+</table>
+
+<h3>📱 Front (web app mobile-first)</h3>
+<div class="card done">
+  <p><strong>6 telas no padrão atomic design</strong> (login → upload → solicitar → análise → aprovado → home). Fluxo de 2 passos final na tela "Aprovado": botão <strong>"Efetuar empréstimo"</strong> (USDC cai na carteira) → botão <strong>"Sacar como Pix"</strong> (Pix cai no banco).</p>
+  <p><strong>Wallet UX:</strong> só Phantom (Q24 v9 trancado). Conexão direta sem modal genérico. Anti-bug de pop-up em loop implementado.</p>
+</div>
+
+<h3>📜 Documentação e segurança</h3>
+<ul>
+  <li>3 Decision Records (DR-001, DR-002, DR-003) registrando decisões críticas com justificativa e dissidências</li>
+  <li>README "Chainlink-grade" com todos os endereços/links pro Solana Explorer (Solange abre o repo)</li>
+  <li>Code review formal (skill review) + squad-review multi-agente pelas mudanças críticas</li>
+  <li>2 PRs abertas e mergeadas com fixes documentados</li>
+</ul>
+
+<!-- ─── EM PROGRESSO ─── -->
+<h2>🟡 Em progresso (hoje)</h2>
+
+<div class="card progress">
+  <div class="card-header"><span class="pill yellow">AGORA</span><p class="card-title">Smoke test end-to-end no front</p></div>
+  <p>Samuel testando o fluxo manualmente: conectar Phantom → subir CNH → pedir empréstimo → Efetuar → Sacar Pix. Já passou da autenticação. Ajustes pontuais de UX/erro sendo aplicados.</p>
+</div>
+
+<div class="card progress">
+  <div class="card-header"><span class="pill yellow">HOJE-AMANHÃ</span><p class="card-title">Vercel deploy (URL pública)</p></div>
+  <p>Front vai pro Vercel hoje à tarde — necessário pra entrega do Taikai (sábado 30/05). Sem URL pública não dá pra submeter.</p>
+</div>
+
+<div class="card progress">
+  <div class="card-header"><span class="pill yellow">HOJE-SEXTA</span><p class="card-title">Chainlink CRE simulate</p></div>
+  <p>O workflow do score (lógica do Chainlink CRE) já compila pra WASM. Falta rodar o <em>simulate</em> e tirar screenshot — Samuel pegando a chave API gratuita (chainlinkcommunity.com). Sem isso, o track Chainlink fica fraco.</p>
+</div>
+
+<!-- ─── PENDENTE ─── -->
+<h2>⏳ O que falta (sequência ideal)</h2>
+
+<div class="timeline">
+  <div class="timeline-item">
+    <div class="timeline-date">28/05 tarde</div>
+    <div class="timeline-content">Smoke E2E completo + Vercel deploy + CRE simulate (depende API key)</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">28/05 noite</div>
+    <div class="timeline-content"><strong>USDC return + Pix real</strong>: motorista assina retorno do USDC pra tesouraria, edge dispara Woovi PROD. Precisa credencial Woovi com você.</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">29/05 sex</div>
+    <div class="timeline-content">Smoke E2E com Pix real (cap R$1) + bug fixes + README polish final</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">30/05 sáb</div>
+    <div class="timeline-content"><strong>Submit Taikai inicial</strong> (deadline oficial) + alinhamento 17h</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">31/05 dom</div>
+    <div class="timeline-content">Vídeo 60s gravado (roteiro pronto em <code>docs/pitch/</code>) + Deck pitch finalizado (rascunho pronto)</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">01/06 seg</div>
+    <div class="timeline-content"><strong>Submit final Taikai</strong> à noite (vídeo + deck)</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">02/06 ter</div>
+    <div class="timeline-content"><strong>Pitch presencial Bienal SP 11h</strong> · Pix bipando no celular do jurado</div>
+  </div>
+</div>
+
+<!-- ─── DECISÕES E DÚVIDAS ─── -->
+<h2>❓ Dúvidas e decisões que dependem de você</h2>
+
+<div class="card question">
+  <div class="card-header"><span class="pill blue">DÚVIDA 1</span><p class="card-title">Credencial Woovi PROD — quando entra?</p></div>
+  <p>Pra Pix real bipar no celular do jurado a gente precisa da credencial Woovi de produção. Plan v9 prevê isso pra hoje/amanhã. <strong>Decisão:</strong> você pega ou Tainan/Arthur pega? Cap R$ 10 por payout, ~R$ 50 de buffer na sub-conta.</p>
+  <p class="meta">⚠️ Risco: se falhar, mock 8s do request-payout serve. Mas perde o efeito UAU.</p>
+</div>
+
+<div class="card question">
+  <div class="card-header"><span class="pill blue">DÚVIDA 2</span><p class="card-title">CCIP "último hop" — mock declarado é OK?</p></div>
+  <p>Plan v9 Q21 pede CRE → CCIP → Anchor receiver. A gente bateu no hard gate ontem 14h sem conseguir wallet EVM (Samuel decidiu não-Metamask). <strong>Decisão tomada (DR-003):</strong> mock declarado honestamente — instruction <code>admin_disburse</code> com assinatura compatível com o CCIP real. Solange premia honestidade &gt; tentativa quebrada (precedente Q14 R1).</p>
+  <p class="meta">Quer revisar essa decisão antes do pitch?</p>
+</div>
+
+<div class="card question">
+  <div class="card-header"><span class="pill blue">DÚVIDA 3</span><p class="card-title">USDC return é obrigatório no MVP?</p></div>
+  <p>Plan v9 (4 movimentações) pede motorista devolver USDC pra tesouraria antes do Pix. Discussão do squad: implementar agora vs deixar motorista FICAR com USDC (narrativa "opcionalidade Web3-native"). <strong>Direção atual:</strong> deixar implementação preparada (migration já aplicada) atrás de feature flag, demo usa mock.</p>
+  <p class="meta">Você ratifica ou prefere implementar full hoje?</p>
+</div>
+
+<!-- ─── RISCOS ─── -->
+<h2>🚨 Riscos abertos</h2>
+
+<div class="card risk">
+  <p><strong>Demo Pix ao vivo na Bienal</strong> — wifi do evento, push do banco do jurado podem atrasar/falhar. <strong>Mitigação:</strong> vídeo 60s gravado em casa + modo mock como fallback no front (8s automático).</p>
+</div>
+
+<div class="card risk">
+  <p><strong>Smoke E2E ainda incompleto</strong> — squad red-team cobrou. Hoje à tarde fecho.</p>
+</div>
+
+<div class="card risk">
+  <p><strong>Cap on-chain (10 USDC) vs cap user-facing (R$10)</strong> — defesa em camadas. Se admin keypair vazar, vault ainda tem teto. <strong>Mitigação pré-pitch:</strong> pre-fund só $20 USDC, key rotation depois.</p>
+</div>
+
+<!-- ─── GLOSSÁRIO ─── -->
+<div class="glossary">
+  <h3>📖 Glossário rápido (quem nunca codou Solana)</h3>
+  <dl>
+    <dt>Anchor program</dt>
+    <dd>É o "contrato inteligente" em Solana — código publicado na rede que move dinheiro segundo regras.</dd>
+    <dt>PDA</dt>
+    <dd>"Program Derived Address" — endereço único deterministicamente derivado. No nosso caso, 1 PDA por CPF = 1 empréstimo por CPF.</dd>
+    <dt>USDC devnet</dt>
+    <dd>Stablecoin oficial da Circle, mas em ambiente de teste (devnet). Não vale dinheiro real, mas funciona idêntico ao mainnet.</dd>
+    <dt>CRE workflow (Chainlink)</dt>
+    <dd>Sistema do Chainlink pra rodar lógica off-chain e entregar resultado on-chain (no nosso caso: score do motorista).</dd>
+    <dt>CCIP</dt>
+    <dd>Protocolo de mensagens cross-chain do Chainlink. Usado pra workflow CRE (Sepolia/Ethereum) "falar" com nosso programa em Solana.</dd>
+    <dt>Edge function</dt>
+    <dd>Função do Supabase que roda no servidor (TypeScript/Deno). É o backend do app — orquestra IA, banco, Solana, Pix.</dd>
+    <dt>Mock / MOCK declarado</dt>
+    <dd>"Versão simulada" de algo. <em>Declarado</em> = a gente diz no pitch "isso aqui é mock, em produção viraria X" — honestidade.</dd>
+  </dl>
+</div>
+
+<!-- ─── FECHAMENTO ─── -->
+<h2>📞 O que preciso da reunião hoje</h2>
+<div class="card question">
+  <ol style="font-size: 14px; margin: 6px 0; padding-left: 22px;">
+    <li><strong>Confirmação:</strong> credencial Woovi PROD — quem pega e quando?</li>
+    <li><strong>Ratificação:</strong> mock CCIP declarado é OK (DR-003)?</li>
+    <li><strong>Direção:</strong> USDC return = feature flag (preparado mas não no demo) ou full implementation hoje?</li>
+    <li><strong>Apoio:</strong> Will pode olhar a parte do OCR do print Uber (parse-uber-print) ainda hoje?</li>
+    <li><strong>Logística:</strong> qual celular vai bipar o Pix no pitch da Bienal? Cadastrar chave Pix no app pré-evento.</li>
+  </ol>
+</div>
+
+<footer>
+  Documento gerado em 28/05/2026 · Repo: github.com/SamuelStefano/hackanation-uber-money · Próximo alinhamento: sáb 30/05 17h
+</footer>
+
+</body>
+</html>

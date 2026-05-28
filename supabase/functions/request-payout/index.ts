@@ -169,10 +169,11 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     .single()
   if (payoutErr) return json({ error: payoutErr.message }, 500, req)
 
-  // DR-002 D8: mock fallback obrigatório pra demo presencial.
-  if (WOOVI_MODE !== 'prod') {
-    // Simula confirmação após 8s via setTimeout? Não — edge fn pode ser killed.
-    // Em vez disso: marca pending agora, front faz polling; webhook MOCK separado seta confirmed em 8s.
+  // DR-002 D8 + sandbox: 3 modos suportados.
+  //   mock     → confirma em 8s sem chamar Woovi (demo offline)
+  //   sandbox  → chama Woovi sandbox real (Pix fake mas request real)
+  //   prod     → chama Woovi PRODUÇÃO (Pix real)
+  if (WOOVI_MODE === 'mock') {
     setTimeout(async () => {
       try {
         await admin.from('payouts').update({
@@ -187,7 +188,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     }, 200, req)
   }
 
-  // PROD: Woovi real
+  // sandbox ou prod → Woovi real
   try {
     const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
       method: 'POST',
@@ -210,7 +211,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     }
 
     await admin.from('payouts').update({ woovi_payload: wooviData }).eq('id', payout.id)
-    return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, mode: 'prod' }, 200, req)
+    return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, mode: WOOVI_MODE }, 200, req)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
     return json({ error: 'Network error', details: String(e) }, 502, req)
