@@ -71,7 +71,9 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
         if (HAS_BACKEND) {
           try {
             const credit = await getCreditStatus()
+            console.log('[login] credit-status:', credit)
             if (credit.has_cnh && credit.has_earnings) next = 'home'
+            console.log('[login] roteando pra', next)
           } catch (e) { console.warn('[login] credit-status fetch failed, defaulting to upload', e) }
         }
         setWaiting(false)
