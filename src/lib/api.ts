@@ -71,9 +71,25 @@ export async function verifyWallet(wallet: string, nonce: string, signatureB58: 
 // ─── Documents (CNH + earnings print) ───────────────────────────
 export type DocKind = 'cnh' | 'print_earnings'
 
+export class NotACnhError extends Error {
+  constructor(public detail: string) { super(detail); this.name = 'NotACnhError' }
+}
+
 export async function processDocument(kind: DocKind, imageBase64: string, mediaType = 'image/jpeg') {
   const r = await authedFetch('process-document', { kind, imageBase64, mediaType })
-  if (!r.ok) throw new Error(`process-document: ${r.status} ${await r.text()}`)
+  if (!r.ok) {
+    const body = await r.text()
+    if (r.status === 422 && body.includes('not_a_cnh')) {
+      try {
+        const parsed = JSON.parse(body) as { message?: string }
+        throw new NotACnhError(parsed.message ?? 'A imagem não é uma CNH.')
+      } catch (e) {
+        if (e instanceof NotACnhError) throw e
+        throw new NotACnhError('A imagem não é uma CNH.')
+      }
+    }
+    throw new Error(`process-document: ${r.status} ${body}`)
+  }
   return r.json() as Promise<{ document_id: string; kind: DocKind; ocr_data: any }>
 }
 

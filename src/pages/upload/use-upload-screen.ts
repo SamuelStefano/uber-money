@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { HAS_BACKEND, processDocument, fileToBase64 } from '@/lib/api'
+import { HAS_BACKEND, processDocument, fileToBase64, NotACnhError } from '@/lib/api'
 import { useToast } from '@/components/organisms/toast-provider'
 import { MOCK_OCR_CNH, MOCK_OCR_EARNINGS, MOCK_OCR_DELAY_MS } from '@/consts/mock'
 import type { CnhData, EarningsData, DocKind } from '@/types/documents'
@@ -52,8 +52,13 @@ export function useUploadScreen(): UseUploadScreenOutput {
         toast.push('Extrato lido')
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-      toast.push('Falha ao ler. Tente outra foto.')
+      if (e instanceof NotACnhError) {
+        setErr(e.detail)
+        toast.push(e.detail)
+      } else {
+        setErr(e instanceof Error ? e.message : String(e))
+        toast.push('Falha ao ler. Tente outra foto.')
+      }
     } finally {
       setLoading(null)
     }
@@ -67,8 +72,14 @@ export function useUploadScreen(): UseUploadScreenOutput {
       setCnh(extracted as CnhData)
       toast.push('Re-analisado')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-      toast.push('Falha ao re-analisar.')
+      if (e instanceof NotACnhError) {
+        setCnh(null); setCnhFile(null)
+        setErr(e.detail)
+        toast.push(e.detail)
+      } else {
+        setErr(e instanceof Error ? e.message : String(e))
+        toast.push('Falha ao re-analisar.')
+      }
     } finally {
       setLoading(null)
     }

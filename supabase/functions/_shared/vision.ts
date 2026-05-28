@@ -12,6 +12,8 @@ const RETRY_MODEL   = Deno.env.get('VISION_RETRY_MODEL')   ?? 'claude-opus-4-7'
 const EARNINGS_MODEL = Deno.env.get('VISION_EARNINGS_MODEL') ?? 'claude-haiku-4-5-20251001'
 
 export type CnhData = {
+  is_cnh: boolean
+  document_type?: string | null
   name: string | null
   cpf: string | null
   birth_date: string | null
@@ -19,6 +21,10 @@ export type CnhData = {
   category: string | null
   raw_text?: string
   confidence: 'high' | 'medium' | 'low'
+}
+
+export class NotACnhError extends Error {
+  constructor(public detail: string) { super(detail); this.name = 'NotACnhError' }
 }
 
 export type EarningsData = {
@@ -31,29 +37,42 @@ export type EarningsData = {
   confidence: 'high' | 'medium' | 'low'
 }
 
-const PROMPT_CNH = `Você é um extrator forense de CNH brasileira (Carteira Nacional de Habilitação). Sua leitura será usada pra KYC — qualquer erro de dígito invalida o cadastro. Precisão é mais importante que velocidade.
+const PROMPT_CNH = `Você é um extrator forense de CNH brasileira. Sua leitura será usada pra KYC.
 
-ESTRUTURA DA CNH (modelo CONTRAN 886/2021):
+PASSO 1 — VERIFIQUE SE É CNH BRASILEIRA
+Antes de qualquer coisa, classifique o documento. Marque is_cnh=true APENAS se enxergar TODOS estes elementos:
+- Título "CARTEIRA NACIONAL DE HABILITAÇÃO" ou "CNH" ou "DRIVER LICENSE"
+- Brasão da República Federativa do Brasil
+- Layout verde/amarelo característico (modelo CONTRAN)
+- Campos rotulados em PT-BR/EN/ES (NOME/NAME, CPF, VALIDADE/EXPIRATION)
+- Foto do condutor
+
+Se for OUTRO tipo de documento (RG, CPF avulso, comprovante, foto qualquer, screenshot aleatório, paisagem, animal, meme), retorne is_cnh=false e descreva em document_type o que realmente é. NÃO invente dados de CNH.
+
+PASSO 2 — SE FOR CNH, EXTRAIA OS DADOS
+Estrutura da CNH (modelo CONTRAN 886/2021):
 - Rótulo "NOME / NAME" — nome completo em CAIXA ALTA
-- Rótulo "DOC. IDENTIDADE / ORG. EMISSOR / UF" — RG (NÃO É CPF; vem com sigla SSP/SP, IFP/RJ etc)
-- Rótulo "CPF" — onze dígitos, formato XXX.XXX.XXX-XX (com pontos e hífen)
+- Rótulo "DOC. IDENTIDADE" — RG (NÃO É CPF; vem com sigla SSP/SP, IFP/RJ etc)
+- Rótulo "CPF" — formato XXX.XXX.XXX-XX
 - Rótulo "DATA NASCIMENTO" — DD/MM/AAAA
 - Rótulo "VALIDADE / EXPIRATION DATE" — DD/MM/AAAA
 - Rótulo "CATEGORIA / CATEGORY" — letra(s) A/B/AB/C/D/E
-- "Nº REGISTRO" — 11 dígitos contíguos sem pontuação, em vermelho destaque (NÃO É CPF)
-- "Nº ESPELHO" — 11 dígitos verticais na borda esquerda (NÃO É CPF)
+- "Nº REGISTRO" — 11 dígitos contíguos em vermelho (NÃO É CPF)
+- "Nº ESPELHO" — 11 dígitos verticais na borda (NÃO É CPF)
 
-ATENÇÃO CRÍTICA: a CNH tem TRÊS números de 11 dígitos. Extraia APENAS o que está sob o rótulo literal "CPF" (com pontos e hífen visíveis ao lado). Se não houver rótulo "CPF" claramente visível, retorne null.
+ATENÇÃO: a CNH tem TRÊS números de 11 dígitos. Extraia APENAS o que está sob o rótulo literal "CPF" (com pontos e hífen visíveis).
 
 PROTOCOLO DO CPF:
-1. Localize o rótulo "CPF" no documento.
+1. Localize o rótulo "CPF".
 2. Leia DÍGITO POR DÍGITO da esquerda pra direita.
 3. Cuidado com confusões: 0↔O, 1↔I, 5↔S, 8↔B.
-4. Valide pelo algoritmo módulo 11 (DV1 e DV2). Se não bater, releia.
-5. Se mesmo após releitura não bate, retorne cpf=null e confidence=low.
+4. Valide pelo algoritmo módulo 11. Se não bate, releia.
+5. Se mesmo após releitura não bate, cpf=null e confidence=low.
 
-FORMATO DE SAÍDA (JSON puro, sem markdown, sem comentários):
+FORMATO DE SAÍDA (JSON puro, sem markdown):
 {
+  "is_cnh": true | false,
+  "document_type": "CNH" ou descrição do que é se não for CNH (ex: "RG", "foto de paisagem", "screenshot", "documento não identificável"),
   "name": "string em CAIXA ALTA ou null",
   "cpf": "XXX.XXX.XXX-XX ou null",
   "birth_date": "YYYY-MM-DD ou null",
@@ -62,7 +81,7 @@ FORMATO DE SAÍDA (JSON puro, sem markdown, sem comentários):
   "confidence": "high|medium|low"
 }
 
-NUNCA inclua texto fora do JSON. NUNCA use crase markdown.`
+Se is_cnh=false, deixe os outros campos null. NUNCA inclua texto fora do JSON.`
 
 const PROMPT_EARNINGS = `Você é um extrator de "Tela de Ganhos" do app Uber/99 (motorista).
 
@@ -166,6 +185,13 @@ export async function visionExtract<T>(
     temperature: 0,
   })
 
+  // Gate: foto não é CNH → rejeita explicitamente
+  if (result.is_cnh === false) {
+    const what = result.document_type ?? 'imagem'
+    console.warn('[vision] não é CNH — detectado:', what)
+    throw new NotACnhError(`Detectamos: ${what}. Envie uma foto da CNH brasileira.`)
+  }
+
   const cpfRaw = result.cpf
   if (cpfRaw && isValidCpf(cpfRaw)) {
     result.cpf = formatCpf(normalizeCpfDigits(cpfRaw)!)
@@ -182,6 +208,9 @@ export async function visionExtract<T>(
       mediaType,
       temperature: 0,
     })
+    if (retry.is_cnh === false) {
+      throw new NotACnhError(`Detectamos: ${retry.document_type ?? 'imagem'}. Envie uma foto da CNH brasileira.`)
+    }
     if (retry.cpf && isValidCpf(retry.cpf)) {
       retry.cpf = formatCpf(normalizeCpfDigits(retry.cpf)!)
       console.log('[vision] CNH pass 2 OK (módulo 11 válido após Opus)')
@@ -189,6 +218,7 @@ export async function visionExtract<T>(
     }
     return { ...retry, confidence: 'low' } as unknown as T
   } catch (e) {
+    if (e instanceof NotACnhError) throw e
     console.error('[vision] CNH pass 2 falhou:', e)
     return { ...result, confidence: 'low' } as unknown as T
   }

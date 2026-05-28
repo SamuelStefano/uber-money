@@ -4,7 +4,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
-import { visionExtract, type CnhData, type EarningsData } from '../_shared/vision.ts'
+import { visionExtract, NotACnhError, type CnhData, type EarningsData } from '../_shared/vision.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -50,6 +50,11 @@ serve(async (req) => {
       ocrData = await visionExtract<EarningsData>('earnings', payload.imageBase64, mediaType)
     }
   } catch (e) {
+    if (e instanceof NotACnhError) {
+      // Apaga o arquivo do storage — não persiste imagem não-CNH
+      await admin.storage.from('documents').remove([path]).catch(() => {})
+      return json({ error: 'not_a_cnh', message: e.detail }, 422, req)
+    }
     return json({ error: 'Vision OCR failed', details: String(e) }, 502, req)
   }
 
