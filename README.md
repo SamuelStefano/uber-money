@@ -18,28 +18,52 @@ Pede no app → score on-chain via Chainlink CRE aprova → **Pix cai na conta e
 | Front | Vite + React 19 + TS + Tailwind v4 + framer-motion |
 | Wallet | `@solana/wallet-adapter` (Phantom only — v9 Q24) |
 | Backend | Supabase (Postgres + Edge Functions Deno + JWT) |
-| On-chain | Anchor 0.30 — `release_loan` + `admin_disburse`, PDA `[LOAN, sha256(cpf‖pepper_per_user)]` |
-| Oráculo | Chainlink CRE workflow (TS → WASM) + CCIP `ccipSend` (Sepolia → Solana) |
+| On-chain | Anchor 0.30 — `borrower_request_loan` (motorista assina) + Ed25519 attestation + Chainlink Data Feed |
+| Oráculo | **Chainlink CRE** workflow (TS→WASM, simulate via sandbox) + **Chainlink Data Feeds** SOL/USD on-chain circuit breaker |
 | Pix | Woovi (env `WOOVI_MODE=prod\|mock`) |
 | Stablecoin | USDC devnet |
 | RPC | Helius devnet + QuickNode failover (v9 Q25) |
 | Hosting | Vercel |
 
-## Chainlink integration
+## Chainlink integration (DR-004)
 
-Pattern canônico **CRE workflow Sepolia → CCIP arbitrary messaging → Anchor receiver Solana devnet**.
+100% on-chain Solana. Dois produtos Chainlink reais num único programa Anchor.
 
-| Camada | Estado | Evidência |
+```
+Motorista (Phantom)
+   ↓ assina 1 tx contendo 3 instructions:
+   ┌────────────────────────────────────────────┐
+   │ ix[0] Ed25519Program — verifica attestation│
+   │       do oracle (CRE workflow score)       │
+   │ ix[1] ATA idempotent (USDC do motorista)   │
+   │ ix[2] borrower_request_loan (Anchor):      │
+   │   • valida Ed25519 via sysvar instructions │
+   │   • CPI → Chainlink Data Feed (SOL/USD)    │
+   │   • circuit breaker: halt se SOL < $10     │
+   │   • transfere USDC vault → motorista       │
+   └────────────────────────────────────────────┘
+```
+
+| Produto Chainlink | Estado | Evidência |
 |---|---|---|
-| CRE workflow TS | ✅ compila pra `binary.wasm` | `cre/score-workflow/main.ts` |
-| CRE simulate | ⏳ pending CRE_API_KEY | screenshot em `docs/cre-simulate.png` (TODO) |
+| **CRE workflow** TS→WASM | ✅ compila + **simulate funcional** | `docs/chainlink/cre-simulate-evidence.txt` (score=650, approved) |
+| **Data Feeds Solana** (SOL/USD) | ✅ **CPI on-chain real** | tx [2Uu56mExh...yWF2](https://explorer.solana.com/tx/2Uu56mExht7tRoaxdy2W41eAx3z9kByJfrF8LiErKDUeRGpZT7G8yWVdGkQaDQ33H3e7mH3R4CxVkMtzNGQ7yWF2?cluster=devnet) (programa invoke `HEvSKof…`) |
+| Ed25519 oracle attestation | ✅ on-chain via sysvar | mesma tx acima |
+| CCIP cross-chain | 📋 roadmap v2 (sem EVM no MVP) | DR-004 |
 | CRE deploy + verify Sepolia | ⏳ 28/05 | Etherscan link aqui (TODO) |
 | CCIP `ccipSend` Sepolia | ⏳ 28/05 | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
 | Solana receiver | ⚠️ MOCK declarado — instruction `admin_disburse(cpf_hash, amount, score, source_chain_selector)` chamada pelo admin (não pelo CCIP router) por restrição de tempo de hackathon. Assinatura compatível com `Any2SolanaMessage`. | `programs/uber-money/src/lib.rs:104` |
 
-**Por que MOCK declarado:** v9 plan Q21 hard gate 27/05 14h passou. Plan B aceito em Q14 R1 ("se travar → mocka + transparência"). Solange (jury) premia honestidade > completude — ver [DR-003](.sdd/uber-money-v2/decisions/DR-003-v9-mock-honest.md).
+**Pivot 28/05 (DR-004):** Saímos do MOCK CCIP e fomos pra **Chainlink real on-chain Solana**:
+- CRE workflow simulate funcional (Chainlink sandbox DON)
+- Data Feeds SOL/USD lido on-chain via CPI (Store program `HEvSKof…`)
+- Motorista assina direto (Phantom signer)
+- Ed25519 attestation pre-instruction
+- Circuit breaker propositado (não decoração teatral)
 
-**Upgrade path produção:** trocar `admin_disburse` por `ccip_receive` real via [solana-starter-kit](https://github.com/smartcontractkit/solana-starter-kit). Assinatura idêntica.
+**Por que `borrower_request_loan` em vez de `admin_disburse`:** narrativa "microcrédito on-chain Solana" exige motorista chamando contrato direto. CCIP→Solana descartado por requerer EVM/Sepolia (incompatível com escopo Solana-only).
+
+**Upgrade path produção:** trocar Ed25519 attestation por CCIP `ccip_receive` real via [solana-starter-kit](https://github.com/smartcontractkit/solana-starter-kit). Assinatura compatível.
 
 ## Programa Anchor — LIVE em devnet ✅
 
@@ -54,12 +78,15 @@ Pattern canônico **CRE workflow Sepolia → CCIP arbitrary messaging → Anchor
 | **Smoke release_loan tx** | `2TyJskPWqYyBpYevdN5iBDEoZ1GjZ5yKyKW29spaS2aEhh8mhXqmSgK4Rrfqjkvk7p3XjFJV1MDkGVxksxiHvB9j` | [open](https://explorer.solana.com/tx/2TyJskPWqYyBpYevdN5iBDEoZ1GjZ5yKyKW29spaS2aEhh8mhXqmSgK4Rrfqjkvk7p3XjFJV1MDkGVxksxiHvB9j?cluster=devnet) |
 | **USDC mint devnet (Circle)** | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | [open](https://explorer.solana.com/address/4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU?cluster=devnet) |
 
-**Vault pre-funded com 20 USDC oficial Circle.** Smoke test 27/05 14:15 BRT: borrower test wallet recebeu 1 USDC do vault via `release_loan(cpf_hash, 1_000_000, 720)`.
+**Vault pre-funded com 20 USDC oficial Circle.** Smokes confirmados on-chain:
+- 27/05: `release_loan` admin-signed via [tx 2TyJsk…vB9j](https://explorer.solana.com/tx/2TyJskPWqYyBpYevdN5iBDEoZ1GjZ5yKyKW29spaS2aEhh8mhXqmSgK4Rrfqjkvk7p3XjFJV1MDkGVxksxiHvB9j?cluster=devnet) (legacy)
+- 28/05: `borrower_request_loan` motorista-signed + Ed25519 + Chainlink Data Feed via [tx 2Uu56mEx…yWF2](https://explorer.solana.com/tx/2Uu56mExht7tRoaxdy2W41eAx3z9kByJfrF8LiErKDUeRGpZT7G8yWVdGkQaDQ33H3e7mH3R4CxVkMtzNGQ7yWF2?cluster=devnet) (DR-004 F+)
 
 Instructions:
 - `initialize_vault()` — one-shot, cria vault PDA `[b"vault"]` + token account
-- `release_loan(cpf_hash, amount, score)` — admin-triggered (Step 1 demo)
-- `admin_disburse(cpf_hash, amount, score, source_chain_selector)` — mock do CCIP receiver
+- **`borrower_request_loan(cpf_hash, amount, score, expires_at)`** — DR-004 F+ atual: motorista é Signer, valida Ed25519 attestation + CPI Chainlink Data Feed, transfere USDC
+- `release_loan(cpf_hash, amount, score)` — admin-signed legacy (feature flag `VITE_ONCHAIN_FLOW=false`)
+- `admin_disburse(...)` — stub histórico
 
 PDA seed: `[b"loan", sha256(cpf || users.cpf_pepper)]` — 1 empréstimo por CPF lifetime. `init` (não `init_if_needed`) → falha hard se já existe.
 
