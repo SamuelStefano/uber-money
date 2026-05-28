@@ -7,7 +7,7 @@ import { isValidCpf, formatCpf, normalizeCpfDigits } from './cpf.ts'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 
-const PRIMARY_MODEL = Deno.env.get('VISION_PRIMARY_MODEL') ?? 'claude-sonnet-4-5-20250929'
+const PRIMARY_MODEL = Deno.env.get('VISION_PRIMARY_MODEL') ?? 'claude-sonnet-4-6'
 const RETRY_MODEL   = Deno.env.get('VISION_RETRY_MODEL')   ?? 'claude-opus-4-7'
 const EARNINGS_MODEL = Deno.env.get('VISION_EARNINGS_MODEL') ?? 'claude-haiku-4-5-20251001'
 
@@ -189,59 +189,59 @@ export async function visionExtract<T>(
     return result as unknown as T
   }
 
-  // CNH: cross-check Sonnet + Opus em paralelo, vota apenas se ambos concordarem
-  console.log('[vision] CNH cross-check Sonnet + Opus em paralelo')
-  const [sonnet, opus] = await Promise.all([
+  // CNH: cross-check Sonnet + Opus em paralelo, vota apenas se ambos concordarem.
+  // allSettled garante que falha de um modelo não derruba o pipeline.
+  console.log('[vision] CNH cross-check', PRIMARY_MODEL, '+', RETRY_MODEL)
+  const settled = await Promise.allSettled([
     callClaude<CnhData>({ model: PRIMARY_MODEL, prompt: PROMPT_CNH, imageBase64, mediaType, temperature: 0 }),
     callClaude<CnhData>({ model: RETRY_MODEL,   prompt: PROMPT_CNH, imageBase64, mediaType, temperature: 0 }),
   ])
+  const sonnetRes = settled[0]
+  const opusRes = settled[1]
 
-  // Gate: pelo menos um confirma que NÃO é CNH → rejeita
-  if (sonnet.is_cnh === false || opus.is_cnh === false) {
-    const what = (sonnet.is_cnh === false ? sonnet.document_type : opus.document_type) ?? 'imagem'
+  if (sonnetRes.status === 'rejected' && opusRes.status === 'rejected') {
+    console.error('[vision] ambos os modelos falharam', sonnetRes.reason, opusRes.reason)
+    throw new Error(`Vision falhou em ambos modelos: ${sonnetRes.reason} | ${opusRes.reason}`)
+  }
+  if (sonnetRes.status === 'rejected') {
+    console.warn('[vision] Sonnet falhou — usando só Opus:', sonnetRes.reason)
+  }
+  if (opusRes.status === 'rejected') {
+    console.warn('[vision] Opus falhou — usando só Sonnet:', opusRes.reason)
+  }
+
+  const sonnet = sonnetRes.status === 'fulfilled' ? sonnetRes.value : null
+  const opus = opusRes.status === 'fulfilled' ? opusRes.value : null
+
+  // Gate: pelo menos um modelo confirma que NÃO é CNH → rejeita
+  if (sonnet?.is_cnh === false || opus?.is_cnh === false) {
+    const what = (sonnet?.is_cnh === false ? sonnet.document_type : opus?.document_type) ?? 'imagem'
     console.warn('[vision] não é CNH — detectado:', what)
     throw new NotACnhError(`Detectamos: ${what}. Envie uma foto da CNH brasileira.`)
   }
 
-  const sCpf = normalizeCpfDigits(sonnet.cpf)
-  const oCpf = normalizeCpfDigits(opus.cpf)
+  const sCpf = sonnet ? normalizeCpfDigits(sonnet.cpf) : null
+  const oCpf = opus ? normalizeCpfDigits(opus.cpf) : null
   const sValid = sCpf && isValidCpf(sCpf)
   const oValid = oCpf && isValidCpf(oCpf)
 
   console.log('[vision] Sonnet CPF:', sCpf, 'válido:', sValid, '— Opus CPF:', oCpf, 'válido:', oValid)
 
-  // Caso ideal: ambos batem E ambos válidos → high confidence
+  // Caso ideal: ambos batem E ambos válidos → high
   if (sValid && oValid && sCpf === oCpf) {
-    console.log('[vision] cross-check OK — Sonnet e Opus concordam')
-    return {
-      ...opus,
-      cpf: formatCpf(sCpf!),
-      confidence: 'high',
-    } as unknown as T
+    return { ...(opus ?? sonnet)!, cpf: formatCpf(sCpf!), confidence: 'high' } as unknown as T
   }
+  // Um único modelo respondeu e passa módulo 11
+  if (oValid && !sonnet) return { ...opus!, cpf: formatCpf(oCpf!), confidence: 'medium' } as unknown as T
+  if (sValid && !opus) return { ...sonnet!, cpf: formatCpf(sCpf!), confidence: 'medium' } as unknown as T
+  // Divergência: prefere Opus se válido, senão Sonnet
+  if (oValid) return { ...opus!, cpf: formatCpf(oCpf!), confidence: 'medium' } as unknown as T
+  if (sValid) return { ...sonnet!, cpf: formatCpf(sCpf!), confidence: 'medium' } as unknown as T
 
-  // Divergência ou um falha módulo 11: usa o que passa módulo 11 (mas marca medium)
-  if (oValid) {
-    console.warn('[vision] divergência — usando Opus (módulo 11 OK)')
-    return {
-      ...opus,
-      cpf: formatCpf(oCpf!),
-      confidence: 'medium',
-    } as unknown as T
-  }
-  if (sValid) {
-    console.warn('[vision] divergência — usando Sonnet (módulo 11 OK)')
-    return {
-      ...sonnet,
-      cpf: formatCpf(sCpf!),
-      confidence: 'medium',
-    } as unknown as T
-  }
-
-  // Nenhum passa módulo 11 — retorna low confidence
-  console.warn('[vision] nenhum passa módulo 11 — confidence low')
+  // Nenhum passa módulo 11
+  const best = opus ?? sonnet
   return {
-    ...opus,
+    ...best!,
     cpf: oCpf ? formatCpf(oCpf) : sCpf ? formatCpf(sCpf) : null,
     confidence: 'low',
   } as unknown as T
