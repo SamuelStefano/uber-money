@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { Screen } from '@/components/atoms/screen'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
@@ -8,9 +9,16 @@ import { ActivityList } from './_components/activity-list'
 import { RequestCreditCta } from './_components/request-credit-cta'
 import { ScoreCard } from './_components/score-card'
 import { LimitCard } from './_components/limit-card'
+import { HomeBackdrop } from './_components/home-backdrop'
 
 interface HomeScreenProps {
   onRequestCredit: () => void
+}
+
+const container = { animate: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }
+const item = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.32, 0.72, 0, 1] } },
 }
 
 export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
@@ -28,27 +36,71 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
 
   return (
     <Screen label="02 Home" scroll>
-      <div style={{
-        flex: 1, padding: '40px 48px 60px',
-        display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
-        gap: 32, maxWidth: 1240, margin: '0 auto', width: '100%',
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 28, minWidth: 0 }}>
-          <div>
-            <div style={{ fontSize: 14, color: 'var(--mute)', fontWeight: 500 }}>{greeting()},</div>
-            <h1 className="tight" style={{ fontSize: 40, fontWeight: 800, margin: '4px 0 0', letterSpacing: '-0.03em' }}>{firstName}.</h1>
-          </div>
+      <HomeBackdrop />
+      <motion.div
+        variants={container}
+        initial="initial"
+        animate="animate"
+        style={{
+          flex: 1, padding: '56px 48px 60px', position: 'relative', zIndex: 1,
+          display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+          gap: 36, maxWidth: 1240, margin: '0 auto', width: '100%',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 32, minWidth: 0 }}>
+          <motion.header variants={item} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 8,
+              padding: '6px 12px 6px 10px', borderRadius: 999,
+              background: 'rgba(10,10,15,0.04)', border: '1px solid var(--line)',
+              fontSize: 12, fontWeight: 600, color: 'var(--mute)',
+            }}>
+              <span style={{ position: 'relative', width: 6, height: 6 }}>
+                <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
+                <span style={{
+                  position: 'absolute', inset: -3, borderRadius: 999,
+                  border: '1px solid var(--accent)', animation: 'pulse-ring 2.2s ease-out infinite',
+                }} />
+              </span>
+              {greeting()}
+            </div>
 
-          <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
-          <ActivityList />
+            <h1 className="tight" style={{
+              margin: '8px 0 0',
+              fontSize: 'clamp(48px, 6.2vw, 76px)',
+              fontWeight: 500, lineHeight: 0.96,
+              letterSpacing: '-0.04em', color: 'var(--ink)',
+            }}>
+              Bom turno,<br />
+              <span style={{ fontWeight: 900, fontStyle: 'italic' }}>{firstName}.</span>
+            </h1>
+
+            <div style={{ marginTop: 14, fontSize: 14, color: 'var(--mute)', maxWidth: 460 }}>
+              Aqui está teu dinheiro e o que dá pra fazer com ele hoje.
+            </div>
+          </motion.header>
+
+          <motion.div variants={item}>
+            <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
+          </motion.div>
+
+          <motion.div variants={item}>
+            <ActivityList />
+          </motion.div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
-          <RequestCreditCta onClick={onRequestCredit} />
-          <ScoreCard value={credit.score} caption={scoreCaption} onUnlock={onRequestCredit} />
-          <LimitCard limit={credit.limit_brl} hint={limitHint} onUnlock={onRequestCredit} />
+          <motion.div variants={item}>
+            <RequestCreditCta onClick={onRequestCredit} />
+          </motion.div>
+          <motion.div variants={item}>
+            <ScoreCard value={credit.score} caption={scoreCaption} onUnlock={onRequestCredit} />
+          </motion.div>
+          <motion.div variants={item}>
+            <LimitCard limit={credit.limit_brl} hint={limitHint} onUnlock={onRequestCredit} />
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </Screen>
   )
 }

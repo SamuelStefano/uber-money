@@ -9,7 +9,7 @@ export interface User {
 
 export interface WalletInfo {
   balanceBRL: number
-  pixKey: string
+  pixKey: string | null
 }
 
 export interface LoanDecision {

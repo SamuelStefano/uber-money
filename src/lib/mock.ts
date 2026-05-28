@@ -11,7 +11,7 @@ import type { LoanRequestPayload } from '@/types/api'
 
 export async function getWalletMock(): Promise<WalletInfo> {
   await sleep(400, 700)
-  return { balanceBRL: 0, pixKey: MOCK_PIX_KEY }
+  return { balanceBRL: 0, pixKey: null }
 }
 
 export async function requestCreditMock(payload: LoanRequestPayload): Promise<LoanDecision> {

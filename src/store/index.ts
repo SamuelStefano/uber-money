@@ -1,9 +1,8 @@
-import { MOCK_PIX_KEY } from '@/consts/mock'
 import type { StoreState, StoreUpdater } from '@/types/store'
 
 const initialState: StoreState = {
   user: null,
-  wallet: { balanceBRL: 0, pixKey: MOCK_PIX_KEY },
+  wallet: { balanceBRL: 0, pixKey: null },
   activity: [],
   lastDecision: null,
   lastReceipt: null,
