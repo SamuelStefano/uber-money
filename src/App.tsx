@@ -10,9 +10,8 @@ import { AnalysisScreen } from '@/pages/analysis'
 import { ApprovedScreen } from '@/pages/approved'
 import { Store } from '@/store'
 import { useStore } from '@/hooks/use-store'
+import { RouteProvider, type Route } from '@/contexts/route-context'
 import type { LoanRequestPayload } from '@/types/api'
-
-type Route = 'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved'
 
 const variants = {
   enter: (d: number) => ({ x: d > 0 ? 24 : -24, opacity: 0.0 }),
@@ -33,8 +32,14 @@ export function App() {
     setHasNavigated(true)
   }, [])
 
+  const goHome = useCallback(() => {
+    setPendingPayload(null)
+    go('home', -1)
+  }, [go])
+
   return (
     <ToastProvider>
+      <RouteProvider value={{ route, goHome }}>
       <AppFrame>
         <AnimatePresence mode="wait" custom={dir}>
           <motion.div
@@ -73,6 +78,7 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </AppFrame>
+      </RouteProvider>
     </ToastProvider>
   )
 }
