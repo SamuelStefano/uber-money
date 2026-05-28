@@ -160,20 +160,18 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
   if (existing) {
-    // Idempotente: devolve o existente. Se ainda pending em sandbox, agenda auto-confirm.
-    if (existing.status === 'pending' && WOOVI_MODE === 'sandbox') {
-      setTimeout(async () => {
-        try {
-          await admin.from('payouts').update({
-            status: 'confirmed',
-            endtoend_id: `SANDBOX-${(existing.woovi_correlation_id ?? existing.id).slice(0, 8)}`,
-          }).eq('id', existing.id).eq('status', 'pending')
-        } catch (e) { console.error('[sandbox] retry auto-confirm failed', e) }
-      }, 3000)
+    // Idempotente: devolve o existente. Sandbox confirma INLINE (setTimeout morre com o isolate).
+    let finalStatus = existing.status
+    if (existing.status === 'pending' && (WOOVI_MODE === 'sandbox' || WOOVI_MODE === 'mock')) {
+      const { error: confirmErr } = await admin.from('payouts').update({
+        status: 'confirmed',
+        endtoend_id: `SANDBOX-${(existing.woovi_correlation_id ?? existing.id).slice(0, 8)}`,
+      }).eq('id', existing.id).eq('status', 'pending')
+      if (!confirmErr) finalStatus = 'confirmed'
     }
     return json({
       payoutId: existing.id,
-      status: existing.status,
+      status: finalStatus,
       correlationId: existing.woovi_correlation_id ?? '',
       amountBRL: Number(existing.amount_brl),
       mode: WOOVI_MODE,
@@ -262,24 +260,19 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
       return json({ error: 'Woovi error', status: wooviRes.status, details: wooviText }, 502, req)
     }
 
-    await admin.from('payouts').update({ woovi_payload: wooviData }).eq('id', payout.id)
-
-    // Sandbox auto-confirm: cobranca foi criada de verdade, mas ninguem paga
-    // o QR em sandbox. Pra demo nao travar no polling, confirma local apos 8s.
+    // Sandbox: confirma INLINE. Cobranca real criada no Woovi mas ninguem paga
+    // o QR em sandbox; pra demo nao travar polling, marca confirmed agora.
     // Prod NAO faz isso — espera webhook real do Woovi.
     if (WOOVI_MODE === 'sandbox') {
-      setTimeout(async () => {
-        try {
-          await admin.from('payouts').update({
-            status: 'confirmed',
-            endtoend_id: `SANDBOX-${correlationId.slice(0, 8)}`,
-            woovi_payload: { ...wooviData, sandbox_auto_confirmed_at: new Date().toISOString() },
-          }).eq('id', payout.id)
-          console.log('[sandbox] auto-confirmed payout', payout.id)
-        } catch (e) { console.error('[sandbox] auto-confirm failed', e) }
-      }, 8000)
+      await admin.from('payouts').update({
+        status: 'confirmed',
+        endtoend_id: `SANDBOX-${correlationId.slice(0, 8)}`,
+        woovi_payload: { ...wooviData, sandbox_auto_confirmed_at: new Date().toISOString() },
+      }).eq('id', payout.id)
+      return json({ payoutId: payout.id, status: 'confirmed', correlationId, amountBRL, mode: WOOVI_MODE }, 200, req)
     }
 
+    await admin.from('payouts').update({ woovi_payload: wooviData }).eq('id', payout.id)
     return json({ payoutId: payout.id, status: 'pending', correlationId, amountBRL, mode: WOOVI_MODE }, 200, req)
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
