@@ -83,8 +83,22 @@ serve((req) => withAuth(req, async (req, user) => {
   const { data: userRow } = await admin.from('users').select('wallet').eq('id', user.id).maybeSingle()
   if (!userRow?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
 
-  // CRIT-1: uma tx cash_out vira Pix uma vez; um loan saca uma vez. Retry com
-  // mesmo client_intent_id passa (upsert idempotente); intent diferente = replay.
+  // CRIT-1: uma tx cash_out vira Pix uma vez; um loan saca uma vez.
+  // Retry idempotente com mesmo client_intent_id devolve o payout existente —
+  // NUNCA re-cobra. Intent diferente sobre mesma sig/loan = replay → 409.
+  const { data: sameIntent } = await admin.from('cashout_intents')
+    .select('id, pix_payout_id, status, amount_brl').eq('source', 'uber_money')
+    .eq('client_intent_id', body.clientIntentId).neq('status', 'failed').maybeSingle()
+  if (sameIntent) {
+    return json({
+      payoutId: sameIntent.pix_payout_id ?? '',
+      status: sameIntent.status,
+      amountBRL: Number(sameIntent.amount_brl),
+      txCashOut: body.cashOutTxSig,
+      mode: WOOVI_MODE,
+      resumed: true,
+    }, 200, req)
+  }
   const { data: sigDup } = await admin.from('cashout_intents')
     .select('id').eq('source', 'uber_money').eq('solana_signature', body.cashOutTxSig)
     .neq('status', 'failed').neq('client_intent_id', body.clientIntentId).limit(1)
