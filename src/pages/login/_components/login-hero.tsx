@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion'
 import { Stat } from '@/components/atoms/stat'
+import { Backdrop } from '@/components/molecules/backdrop'
 
 export function LoginHero() {
   return (
@@ -8,55 +8,7 @@ export function LoginHero() {
       display: 'flex', flexDirection: 'column', justifyContent: 'center',
       position: 'relative', overflow: 'hidden',
     }}>
-      <motion.div
-        aria-hidden
-        style={{
-          position: 'absolute', inset: -120, pointerEvents: 'none',
-          background: `
-            radial-gradient(620px 480px at 18% 22%, rgba(0,194,110,0.28) 0%, transparent 60%),
-            radial-gradient(580px 420px at 80% 18%, rgba(153,69,255,0.16) 0%, transparent 60%),
-            radial-gradient(700px 540px at 60% 95%, rgba(255,176,71,0.22) 0%, transparent 60%)
-          `,
-        }}
-        animate={{ x: [0, 24, -18, 0], y: [0, -18, 12, 0] }}
-        transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
-      />
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: 'radial-gradient(rgba(8,8,10,0.055) 0.5px, transparent 0.5px)',
-        backgroundSize: '26px 26px',
-        backgroundPosition: '-1px -1px',
-        maskImage: 'radial-gradient(circle at 30% 50%, black 0%, black 60%, transparent 92%)',
-      }} />
-      <div aria-hidden style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        opacity: 0.025, mixBlendMode: 'multiply',
-        backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence baseFrequency='0.88' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`,
-      }} />
-
-      <motion.svg
-        aria-hidden
-        width="100%" height="2"
-        style={{
-          position: 'absolute', left: 0, right: 0, top: '38%',
-          pointerEvents: 'none', opacity: 0.45,
-        }}
-      >
-        <motion.line
-          x1="0" y1="1" x2="100%" y2="1"
-          stroke="url(#login-beam)" strokeWidth="1"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 1, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
-        />
-        <defs>
-          <linearGradient id="login-beam" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="rgba(0,194,110,0)" />
-            <stop offset="50%" stopColor="rgba(0,194,110,0.65)" />
-            <stop offset="100%" stopColor="rgba(0,194,110,0)" />
-          </linearGradient>
-        </defs>
-      </motion.svg>
+      <Backdrop variant="login-hero" />
 
       <div style={{ position: 'relative', maxWidth: 580 }}>
         <div style={{

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Icon } from '@/components/atoms/icon'
 import { Spinner } from '@/components/atoms/spinner'
+import { Backdrop } from '@/components/molecules/backdrop'
 
 interface LoginWalletPanelProps {
   waiting: boolean
@@ -18,18 +19,7 @@ export function LoginWalletPanel({ waiting, onConnect }: LoginWalletPanelProps) 
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 'clamp(32px, 5vw, 64px)', position: 'relative', overflow: 'hidden',
     }}>
-      <motion.div
-        aria-hidden
-        style={{
-          position: 'absolute', inset: -120, pointerEvents: 'none',
-          background: `
-            radial-gradient(560px 420px at 80% 20%, rgba(0,194,110,0.18) 0%, transparent 60%),
-            radial-gradient(500px 380px at 20% 80%, rgba(120,148,255,0.16) 0%, transparent 60%)
-          `,
-        }}
-        animate={{ x: [0, -20, 14, 0], y: [0, 14, -10, 0] }}
-        transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-      />
+      <Backdrop variant="login-panel" />
 
       <motion.div
         initial={{ opacity: 0, y: 12 }}
