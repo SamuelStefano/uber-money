@@ -9,6 +9,20 @@ const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
 // ⚠️ Skip HMAC só pra sandbox enquanto não temos o secret no painel.
 // NUNCA ativar em prod — qualquer chamada externa fica aceita.
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
+
+function isProduction(): boolean {
+  if (Deno.env.get('LOCAL_DEV')) return false
+  if (Deno.env.get('ENVIRONMENT') === 'production') return true
+  if (Deno.env.get('SUPABASE_DB_URL')?.includes('supabase.co')) return true
+  return false
+}
+
+if (INSECURE_MODE && isProduction()) {
+  console.error('[woovi-webhook] INSECURE_MODE não permitido em prod')
+  // Fail hard at startup so the function never serves requests insecurely in prod.
+  throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true não é permitido em ambiente de produção')
+}
+
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
 
 async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
