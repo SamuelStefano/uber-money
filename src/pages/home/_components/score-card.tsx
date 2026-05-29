@@ -1,5 +1,6 @@
 import { Card } from '@/components/atoms/card'
 import { ScoreBar } from '@/components/atoms/score-bar'
+import { LockedCardCta } from '@/components/molecules/locked-card-cta'
 
 interface ScoreCardProps {
   value: number | null
@@ -17,18 +18,7 @@ export function ScoreCard({ value, caption, onUnlock }: ScoreCardProps) {
         <div style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 600 }}>Seu score</div>
       </div>
       {locked ? (
-        <button
-          onClick={onUnlock}
-          style={{
-            marginTop: 10, padding: 0, background: 'transparent', border: 'none',
-            textAlign: 'left', cursor: onUnlock ? 'pointer' : 'default',
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            Solicite crédito pra ver seu score
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--mute)' }}>{caption}</div>
-        </button>
+        <LockedCardCta heading="Solicite crédito pra ver seu score" caption={caption} onUnlock={onUnlock} />
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>

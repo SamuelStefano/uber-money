@@ -1,5 +1,6 @@
 import { Card } from '@/components/atoms/card'
 import { Money } from '@/components/atoms/money'
+import { LockedCardCta } from '@/components/molecules/locked-card-cta'
 
 interface LimitCardProps {
   limit: number | null
@@ -13,18 +14,7 @@ export function LimitCard({ limit, hint, onUnlock }: LimitCardProps) {
     <Card padded style={{ padding: 22 }}>
       <div style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 600 }}>Limite disponível</div>
       {locked ? (
-        <button
-          onClick={onUnlock}
-          style={{
-            marginTop: 8, padding: 0, background: 'transparent', border: 'none',
-            textAlign: 'left', cursor: onUnlock ? 'pointer' : 'default',
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            Solicite crédito pra desbloquear seu limite
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--mute)' }}>{hint}</div>
-        </button>
+        <LockedCardCta heading="Solicite crédito pra desbloquear seu limite" caption={hint} onUnlock={onUnlock} />
       ) : (
         <>
           <div style={{ marginTop: 4 }}>

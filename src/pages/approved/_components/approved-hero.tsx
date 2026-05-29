@@ -1,6 +1,7 @@
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { Money } from '@/components/atoms/money'
+import { TxLink } from '@/components/molecules/tx-link'
 import type { LoanDecision } from '@/types/domain'
 
 // DR-002 D4: 2-step UX (Q8 TL).
@@ -66,13 +67,9 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
       {release?.txRelease && (
         <div style={{
           marginTop: 16, fontSize: 12, color: 'var(--mute)',
-          fontFamily: 'monospace', wordBreak: 'break-all', maxWidth: 480, margin: '16px auto 0',
+          maxWidth: 480, margin: '16px auto 0',
         }}>
-          tx Solana: <a
-            href={`https://explorer.solana.com/tx/${release.txRelease}?cluster=devnet`}
-            target="_blank" rel="noopener noreferrer"
-            style={{ color: 'var(--accent-deep)' }}
-          >{release.txRelease.slice(0, 12)}…{release.txRelease.slice(-8)}</a>
+          tx Solana: <TxLink hash={release.txRelease} cluster="devnet" short />
         </div>
       )}
 
