@@ -4,12 +4,12 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import {
   computeScoreV5,
-  validateScoreInputs,
   type FinalidadeId,
   type ScoreBreakdown,
   type ScoreInputs,
   type ScoreResult,
 } from '../_shared/score-rules.ts'
+import { normalizeScoreBody } from '../_shared/normalize-score-body.ts'
 import { buildAttestation, type AttestationPayload } from '../_shared/ed25519-attest.ts'
 
 const IDEMPOTENCY_WINDOW_MS = 5 * 60 * 1000
@@ -44,10 +44,10 @@ interface ResponseBody {
 }
 
 serve((req) => withAuth(req, async (req, user) => {
-  let raw: unknown
-  try { raw = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
+  let raw: Record<string, unknown>
+  try { raw = (await req.json()) as Record<string, unknown> } catch { return json({ error: 'Invalid JSON' }, 400, req) }
 
-  const parsed = validateScoreInputs(raw)
+  const parsed = await normalizeScoreBody(raw, user.id)
   if ('error' in parsed) return json(parsed, 400, req)
   const inputs: ScoreInputs = parsed
 
