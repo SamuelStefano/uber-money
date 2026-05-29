@@ -103,6 +103,11 @@ serve((req) => withAuth(req, async (req, user) => {
   const expectedBorrower = borrowerRow?.wallet as string | null
   if (!expectedBorrower) return json({ error: 'Borrower wallet missing; cannot verify repay binding' }, 409, req)
 
+  // Versioned tx com Address Lookup Table teria índices fora de accountKeys
+  // (que só lista as static keys). Sem isso, a comparação viraria undefined.
+  if (matched.accounts[0] >= accountKeys.length || matched.accounts[1] >= accountKeys.length) {
+    return json({ error: 'repay_loan accounts out of range (lookup table not supported)' }, 400, req)
+  }
   const ixLoanPda = accountKeys[matched.accounts[1]]
   const ixBorrower = accountKeys[matched.accounts[0]]
   if (ixLoanPda !== expectedLoanPda) {

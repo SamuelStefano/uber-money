@@ -42,8 +42,11 @@ async function verifyCashOut(sig: string, borrowerWallet: string, amountUSDC: bi
 
   const pre = tx.meta?.preTokenBalances?.find((b) => b.accountIndex === vtaIndex)
   const post = tx.meta?.postTokenBalances?.find((b) => b.accountIndex === vtaIndex)
-  const preAmt = BigInt(pre?.uiTokenAmount.amount ?? '0')
-  const postAmt = BigInt(post?.uiTokenAmount.amount ?? '0')
+  // Sem o saldo pré, preAmt cairia em 0 e um saldo pré-existente alto passaria
+  // como se fosse depósito — falso positivo. Exige ambos os snapshots.
+  if (!pre || !post) return 'vault token balance snapshot missing in tx metadata'
+  const preAmt = BigInt(pre.uiTokenAmount.amount ?? '0')
+  const postAmt = BigInt(post.uiTokenAmount.amount ?? '0')
   if (postAmt - preAmt < amountUSDC) return `vault received ${postAmt - preAmt}, expected >= ${amountUSDC}`
 
   return null
