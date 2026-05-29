@@ -39,7 +39,6 @@ async function authedFetch(path: string, body: unknown): Promise<Response> {
   })
 }
 
-// ─── Wallet auth ────────────────────────────────────────────────
 export async function getNonce(wallet: string): Promise<{ nonce: string; message: string }> {
   const r = await fetch(fnUrl('wallet-auth'), {
     method: 'POST',
@@ -68,7 +67,6 @@ export async function verifyWallet(wallet: string, nonce: string, signatureB58: 
   return data
 }
 
-// ─── Documents (CNH + earnings print) ───────────────────────────
 export type DocKind = 'cnh' | 'print_earnings'
 
 export class NotACnhError extends Error {
@@ -93,7 +91,6 @@ export async function processDocument(kind: DocKind, imageBase64: string, mediaT
   return r.json() as Promise<{ document_id: string; kind: DocKind; ocr_data: any }>
 }
 
-// ─── Credit status (último loan_request do user) ────────────────
 export interface CreditStatus {
   has_request: boolean
   has_cnh: boolean
@@ -111,7 +108,6 @@ export async function getCreditStatus(): Promise<CreditStatus> {
   return r.json()
 }
 
-// ─── Loan flow ──────────────────────────────────────────────────
 // DR-001 D3: mapeia IDs do front (pneu/combustivel/...) pro enum loan_reason do backend.
 const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {
   pneu: 'vehicle_repair',
@@ -207,7 +203,6 @@ export async function requestPayout(loanId: string, pixKey: string, pixKeyType: 
   return r.json()
 }
 
-// ─── Histórico do user (lido direto via RLS — service_role bypass não usado) ────
 interface LoanRow {
   id: string
   principal_brl: number
@@ -296,7 +291,6 @@ export async function pollUntilConfirmed(payoutId: string, opts: { intervalMs?: 
   throw new Error('Timeout aguardando confirmação do Pix')
 }
 
-// ─── Helpers ────────────────────────────────────────────────────
 export async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()

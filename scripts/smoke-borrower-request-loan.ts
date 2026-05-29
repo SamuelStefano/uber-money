@@ -53,11 +53,9 @@ async function main() {
   const admin = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'))))
   console.log('Admin (oracle):', admin.publicKey.toBase58())
 
-  // Borrower test wallet — simula o motorista assinando direto
   const borrower = Keypair.generate()
   console.log('Borrower:', borrower.publicKey.toBase58())
 
-  // Funda 0.05 SOL pro borrower (rent ATA + rent loan PDA + fees)
   console.log('\n[1] Fundando borrower com 0.05 SOL…')
   const fundTx = new Transaction().add(SystemProgram.transfer({
     fromPubkey: admin.publicKey,
@@ -71,7 +69,6 @@ async function main() {
   await conn.confirmTransaction(fundSig, 'confirmed')
   console.log('  ✓ Fund tx:', fundSig)
 
-  // PDAs
   const [vault] = PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID)
   const vaultTokenAccount = await fetchVaultTokenAccount(conn, vault)
   const cpfHash = createHash('sha256').update('99988877766-borrower-test-' + Date.now()).digest()
@@ -86,7 +83,6 @@ async function main() {
   const borrowerAta = await getAssociatedTokenAddress(USDC_DEVNET, borrower.publicKey)
   console.log('  Borrower ATA:', borrowerAta.toBase58())
 
-  // Admin assina Ed25519 attestation
   const amount = 1_000_000n  // 1 USDC
   const score = 720
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 300)
@@ -101,7 +97,6 @@ async function main() {
   const signature = nacl.sign.detached(message, admin.secretKey)
   console.log('  Signature (64 bytes):', Buffer.from(signature).toString('hex').slice(0, 32) + '…')
 
-  // Monta tx com Ed25519 verify ix (idx 0) + borrower_request_loan ix (idx 1)
   const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
     publicKey: admin.publicKey.toBytes(),
     message,
@@ -153,7 +148,6 @@ async function main() {
   console.log('  ✓ Confirmada!')
   console.log(`  Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`)
 
-  // Valida
   const borrowerBal = await conn.getTokenAccountBalance(borrowerAta).catch(() => null)
   const vaultBal = await conn.getTokenAccountBalance(vaultTokenAccount)
   console.log('\n[5] Resultado:')

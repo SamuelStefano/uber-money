@@ -52,7 +52,6 @@ async function main() {
   const admin = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'))))
   console.log('Admin              :', admin.publicKey.toBase58())
 
-  // Test borrower distinto do smoke release_loan
   const borrower = Keypair.generate()
   console.log('Borrower (test)    :', borrower.publicKey.toBase58())
 
