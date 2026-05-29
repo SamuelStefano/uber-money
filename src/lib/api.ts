@@ -281,9 +281,10 @@ interface PayoutRow {
 
 export async function getUserActivity(): Promise<ActivityItem[]> {
   const sb = supabase()
-  const [{ data: loans }, { data: payouts }] = await Promise.all([
+  const [{ data: loans }, { data: payouts }, { data: repays }] = await Promise.all([
     sb.from('loans').select('id, principal_brl, interest_pct, due_date, status, created_at, request_id').order('created_at', { ascending: false }).limit(20),
     sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'release').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
+    sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'repay').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
   ])
   const loanMap = new Map<string, LoanRow>()
   for (const l of (loans as LoanRow[] | null) ?? []) loanMap.set(l.id, l)
@@ -322,6 +323,16 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
       decision,
     })
     loanIdsWithPix.add(p.loan_id)
+  }
+  for (const p of (repays as PayoutRow[] | null) ?? []) {
+    items.push({
+      id: p.id,
+      kind: 'repay',
+      amountBRL: Number(p.amount_brl),
+      label: 'Empréstimo pago',
+      sub: `Empréstimo ${p.loan_id.slice(0, 8)}`,
+      timestamp: p.created_at,
+    })
   }
   for (const l of (loans as LoanRow[] | null) ?? []) {
     if (loanIdsWithPix.has(l.id)) continue
