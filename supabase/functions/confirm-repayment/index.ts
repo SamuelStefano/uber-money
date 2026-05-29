@@ -29,7 +29,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: loan } = await admin
     .from('loans')
-    .select('id, tx_repay, status, on_chain_pda, repaid_at, loan_requests!inner(user_id)')
+    .select('id, tx_repay, status, updated_at, loan_requests!inner(user_id)')
     .eq('id', body.loanId)
     .maybeSingle()
   if (!loan) return json({ error: 'Loan not found' }, 404, req)
@@ -42,7 +42,7 @@ serve((req) => withAuth(req, async (req, user) => {
       loanId: body.loanId,
       status: 'paid',
       txRepay: body.txRepay,
-      repaidAt: loan.repaid_at as string,
+      repaidAt: (loan.updated_at as string | null) ?? new Date().toISOString(),
       explorer: explorerFor(body.txRepay),
     }
     return json(resp, 200, req)
@@ -95,7 +95,7 @@ serve((req) => withAuth(req, async (req, user) => {
   const now = new Date().toISOString()
   const { data: updated, error: updErr } = await admin
     .from('loans')
-    .update({ status: 'paid', tx_repay: body.txRepay, repaid_at: now })
+    .update({ status: 'paid', tx_repay: body.txRepay })
     .eq('id', body.loanId)
     .is('tx_repay', null)
     .select('id')

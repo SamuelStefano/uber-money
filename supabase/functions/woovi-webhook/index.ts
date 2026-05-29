@@ -2,7 +2,10 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
+import { deriveLoanPda, PublicKey } from '../_shared/anchor-signer.ts'
 
+const PAYOUT_MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '1')
+const BRL_PER_USDC = 5
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
 const LOCAL_DEV = Deno.env.get('LOCAL_DEV') === 'true'
@@ -91,29 +94,29 @@ serve(async (req) => {
 async function generateAndStoreRepayAttestation(payoutId: string, loanId: string): Promise<void> {
   const { data: loan } = await admin
     .from('loans')
-    .select('id, principal_brl, interest_pct, on_chain_pda, loan_requests!inner(cpf_hash, user_id)')
+    .select('id, principal_brl, interest_pct, loan_requests!inner(cpf_hash, user_id)')
     .eq('id', loanId)
     .maybeSingle()
   if (!loan) { console.error('[woovi-webhook] loan not found', { loanId }); return }
+
+  const cpfHashRaw = loan.loan_requests.cpf_hash
+  if (!cpfHashRaw) { console.error('[woovi-webhook] cpf_hash missing', { loanId }); return }
 
   const { data: userRow } = await admin
     .from('users').select('wallet').eq('id', loan.loan_requests.user_id).maybeSingle()
   if (!userRow?.wallet) { console.error('[woovi-webhook] user wallet missing', { loanId }); return }
 
-  const loanPdaBase58 = loan.on_chain_pda
-  if (!loanPdaBase58) { console.error('[woovi-webhook] loan_pda missing'); return }
-
-  const cpfHashHex = typeof loan.loan_requests.cpf_hash === 'string'
-    ? loan.loan_requests.cpf_hash.replace(/^\\x/, '')
-    : Array.from(loan.loan_requests.cpf_hash as Uint8Array).map((b) => b.toString(16).padStart(2, '0')).join('')
+  const cpfHashHex = typeof cpfHashRaw === 'string'
+    ? cpfHashRaw.replace(/^\\x/, '')
+    : Array.from(cpfHashRaw as Uint8Array).map((b) => b.toString(16).padStart(2, '0')).join('')
   const cpfHash = hexToBytes(cpfHashHex)
 
-  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
-  const loanPda = new PublicKey(loanPdaBase58).toBytes()
+  const [loanPdaPubkey] = deriveLoanPda(cpfHash)
+  const loanPda = loanPdaPubkey.toBytes()
   const borrower = new PublicKey(userRow.wallet).toBytes()
 
   const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
-  const amountUSDC = BigInt(Math.round(Math.min(amountBRL, 10000) * 1e6 / 5))
+  const amountUSDC = BigInt(Math.round(Math.min(amountBRL, PAYOUT_MAX_BRL) * 1e6 / BRL_PER_USDC))
 
   const { buildRepayAttestation } = await import('../_shared/ed25519-attest-repay.ts')
   const attestation = await buildRepayAttestation({
