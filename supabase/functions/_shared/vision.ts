@@ -225,7 +225,7 @@ export async function visionExtract<T>(
   const sValid = sCpf && isValidCpf(sCpf)
   const oValid = oCpf && isValidCpf(oCpf)
 
-  console.log('[vision] Sonnet CPF:', sCpf, 'válido:', sValid, '— Opus CPF:', oCpf, 'válido:', oValid)
+  console.log('[vision] CPF parse — sonnet válido:', !!sValid, 'opus válido:', !!oValid, 'iguais:', sCpf === oCpf)
 
   // Caso ideal: ambos batem E ambos válidos → high
   if (sValid && oValid && sCpf === oCpf) {

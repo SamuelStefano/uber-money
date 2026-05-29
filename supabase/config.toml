@@ -26,3 +26,18 @@ verify_jwt = false
 
 [functions.usdc-to-pix]
 verify_jwt = false
+
+[functions.confirm-repayment]
+verify_jwt = false
+
+[functions.prepare-repayment]
+verify_jwt = false
+
+[functions.get-credit-status]
+verify_jwt = false
+
+[functions.score-credit]
+verify_jwt = false
+
+[functions.dev-reset]
+verify_jwt = false

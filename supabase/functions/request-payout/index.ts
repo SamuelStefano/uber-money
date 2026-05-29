@@ -198,7 +198,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   if (candidateCpf && isValidCpf(candidateCpf)) {
     customer.taxID = candidateCpf
   } else if (candidateCpf) {
-    console.warn('[payout] CPF candidato falhou checksum, omitindo taxID:', candidateCpf)
+    console.warn('[payout] CPF candidato falhou checksum, omitindo taxID')
   }
   if (customerEmail) customer.email = customerEmail
   else if (body.pixKeyType === 'email') customer.email = body.pixKey

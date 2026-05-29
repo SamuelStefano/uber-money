@@ -1,17 +1,24 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { jsonOpen, handleOptionsOpen } from '../_shared/cors.ts'
+import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
+import { withAuth } from '../_shared/with-auth.ts'
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return handleOptionsOpen()
+const ENVIRONMENT = (Deno.env.get('ENVIRONMENT') ?? '').toLowerCase()
+const ALLOWED_ENVS = new Set(['development', 'sandbox', 'staging', 'local', ''])
+
+serve((req) => withAuth(req, async (req, user) => {
+  if (!ALLOWED_ENVS.has(ENVIRONMENT)) {
+    return json({ error: 'dev-reset disabled in this environment' }, 403, req)
+  }
 
   let body: { wallet?: string }
-  try { body = await req.json() } catch { return jsonOpen({ error: 'Invalid JSON' }, 400) }
+  try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
   const wallet = body.wallet?.trim()
-  if (!wallet) return jsonOpen({ error: 'wallet required' }, 400)
+  if (!wallet) return json({ error: 'wallet required' }, 400, req)
 
-  const { data: u } = await admin.from('users').select('id').eq('wallet', wallet).maybeSingle()
-  if (!u) return jsonOpen({ ok: true, wiped: 0, note: 'wallet not found — nothing to do' }, 200)
+  const { data: u } = await admin.from('users').select('id, wallet').eq('wallet', wallet).maybeSingle()
+  if (!u) return json({ ok: true, wiped: 0, note: 'wallet not found — nothing to do' }, 200, req)
+  if (u.id !== user.id) return json({ error: 'Forbidden — wallet not owned by caller' }, 403, req)
 
   const userId = u.id
   const report: Record<string, number | string> = { userId }
@@ -44,5 +51,5 @@ serve(async (req) => {
   const { error: authErr } = await admin.auth.admin.deleteUser(userId)
   report.auth_user_deleted = authErr ? authErr.message : 'ok'
 
-  return jsonOpen({ ok: true, ...report }, 200)
-})
+  return json({ ok: true, ...report }, 200, req)
+}))
