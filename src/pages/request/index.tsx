@@ -1,6 +1,8 @@
 import { Screen } from '@/components/atoms/screen'
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
+import { PageHeading } from '@/components/atoms/page-heading'
+import { SecurityNote } from '@/components/molecules/security-note'
 import { useRequestScreen } from './use-request-screen'
 import { AmountPicker } from './_components/amount-picker'
 import { ReasonPicker } from './_components/reason-picker'
@@ -27,12 +29,11 @@ export function RequestScreen({ onSubmit, onBack }: RequestScreenProps) {
           <Icon.ArrowLeft style={{ width: 16, height: 16 }} /> Voltar
         </button>
 
-        <h1 className="tight" style={{ fontSize: 56, fontWeight: 800, margin: '20px 0 0', letterSpacing: '-0.035em', lineHeight: 1.02 }}>
-          Quanto você precisa hoje?
-        </h1>
-        <p style={{ marginTop: 12, fontSize: 16, color: 'var(--mute)' }}>
-          Aprovação na hora. Dinheiro via Pix.
-        </p>
+        <div style={{ marginTop: 20 }}>
+          <PageHeading subtitle="Aprovação na hora. Dinheiro via Pix.">
+            Quanto você precisa hoje?
+          </PageHeading>
+        </div>
 
         <AmountPicker value={r.amount} onChange={r.setAmount} />
         <ReasonPicker value={r.reason} onChange={r.setReason} />
@@ -62,9 +63,7 @@ export function RequestScreen({ onSubmit, onBack }: RequestScreenProps) {
           <Button variant="accent" size="lg" disabled={!r.valid} onClick={r.submit} icon={<Icon.ArrowRight />} style={{ minWidth: 280 }}>
             Pedir agora
           </Button>
-          <div style={{ fontSize: 12, color: 'var(--mute-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon.Shield /><span>Análise instantânea · sem consulta ao SPC</span>
-          </div>
+          <SecurityNote>Análise instantânea · sem consulta ao SPC</SecurityNote>
         </div>
       </div>
     </Screen>

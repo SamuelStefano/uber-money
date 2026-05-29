@@ -1,6 +1,8 @@
 import { Screen } from '@/components/atoms/screen'
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
+import { PageHeading } from '@/components/atoms/page-heading'
+import { SecurityNote } from '@/components/molecules/security-note'
 import { UploadZone } from './_components/upload-zone'
 import { CnhReviewCard } from './_components/cnh-review-card'
 import { useUploadScreen } from './use-upload-screen'
@@ -21,12 +23,11 @@ export function UploadScreen({ onDone }: UploadScreenProps) {
   return (
     <Screen label="02.5 Upload" scroll>
       <div style={{ flex: 1, padding: '40px 48px 60px', maxWidth: 880, margin: '0 auto', width: '100%' }}>
-        <h1 className="tight" style={{ fontSize: 44, fontWeight: 800, margin: '20px 0 0', letterSpacing: '-0.035em', lineHeight: 1.05 }}>
-          Pra começar, envie 2 fotos.
-        </h1>
-        <p style={{ marginTop: 12, fontSize: 16, color: 'var(--mute)' }}>
-          Sua CNH e a tela de ganhos da semana. Vamos ler os números pra calcular seu score.
-        </p>
+        <div style={{ marginTop: 20 }}>
+          <PageHeading subtitle="Sua CNH e a tela de ganhos da semana. Vamos ler os números pra calcular seu score.">
+            Pra começar, envie 2 fotos.
+          </PageHeading>
+        </div>
 
         <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
           {cnh ? (
@@ -70,9 +71,7 @@ export function UploadScreen({ onDone }: UploadScreenProps) {
           >
             Continuar
           </Button>
-          <div style={{ fontSize: 12, color: 'var(--mute-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon.Shield /><span>Seus dados ficam off-chain (LGPD). Só o score vai pra blockchain.</span>
-          </div>
+          <SecurityNote>Seus dados ficam off-chain (LGPD). Só o score vai pra blockchain.</SecurityNote>
         </div>
       </div>
     </Screen>

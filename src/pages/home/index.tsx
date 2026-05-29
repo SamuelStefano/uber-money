@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { Screen } from '@/components/atoms/screen'
+import { PageHeading } from '@/components/atoms/page-heading'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
@@ -47,21 +48,12 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32, minWidth: 0 }}>
-          <motion.header variants={item}>
-            <h1 className="tight" style={{
-              margin: 0,
-              fontSize: 'clamp(48px, 6.2vw, 76px)',
-              fontWeight: 500, lineHeight: 0.96,
-              letterSpacing: '-0.04em', color: 'var(--ink)',
-            }}>
+          <motion.div variants={item}>
+            <PageHeading subtitle="Aqui está teu dinheiro e o que dá pra fazer com ele hoje.">
               Bom turno,<br />
               <span style={{ fontWeight: 900, fontStyle: 'italic' }}>{firstName}.</span>
-            </h1>
-
-            <div style={{ marginTop: 14, fontSize: 14, color: 'var(--mute)', maxWidth: 460 }}>
-              Aqui está teu dinheiro e o que dá pra fazer com ele hoje.
-            </div>
-          </motion.header>
+            </PageHeading>
+          </motion.div>
 
           <motion.div variants={item}>
             <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
