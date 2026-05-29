@@ -193,4 +193,4 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ⏳ USDC return (DR-003 D3: adiado 28/05, migration 0006 prep feita)
 
 ## Time
-Samuel Stefano (lead Uber Money) · William Rodrigo (lead Chain Oil) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto) · Josyani/Lídia (front).
+Samuel Stefano (lead Uber Money) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto).
