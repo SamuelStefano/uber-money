@@ -87,12 +87,14 @@ async function main() {
   const score = 720
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 300)
   const message = Buffer.concat([
+    Buffer.from('LOAN_V01'),
     cpfHash,
+    borrower.publicKey.toBuffer(),
     u64LE(amount),
     u16LE(score),
     i64LE(expiresAt),
   ])
-  console.log('\n[3] Message (50 bytes):', message.toString('hex'))
+  console.log('\n[3] Message (90 bytes):', message.toString('hex'))
 
   const signature = nacl.sign.detached(message, admin.secretKey)
   console.log('  Signature (64 bytes):', Buffer.from(signature).toString('hex').slice(0, 32) + '…')

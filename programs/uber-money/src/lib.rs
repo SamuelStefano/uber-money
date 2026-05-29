@@ -70,6 +70,7 @@ pub mod uber_money {
             &ed25519_data,
             &ORACLE_PUBKEY,
             cpf_hash,
+            ctx.accounts.borrower.key(),
             amount,
             score,
             expires_at,
@@ -269,6 +270,7 @@ fn verify_ed25519_attestation(
     data: &[u8],
     expected_signer: &Pubkey,
     cpf_hash: [u8; 32],
+    borrower: Pubkey,
     amount: u64,
     score: u16,
     expires_at: i64,
@@ -289,8 +291,10 @@ fn verify_ed25519_attestation(
         UberError::WrongOracleSigner
     );
 
-    let mut expected = Vec::with_capacity(50);
+    let mut expected = Vec::with_capacity(90);
+    expected.extend_from_slice(b"LOAN_V01");
     expected.extend_from_slice(&cpf_hash);
+    expected.extend_from_slice(&borrower.to_bytes());
     expected.extend_from_slice(&amount.to_le_bytes());
     expected.extend_from_slice(&score.to_le_bytes());
     expected.extend_from_slice(&expires_at.to_le_bytes());

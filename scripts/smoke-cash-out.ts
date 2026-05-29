@@ -60,7 +60,7 @@ async function main() {
   const amount = 20_000n // 0.02 USDC
   const score = 720
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 300)
-  const releaseMessage = Buffer.concat([cpfHash, u64LE(amount), u16LE(score), i64LE(expiresAt)])
+  const releaseMessage = Buffer.concat([Buffer.from('LOAN_V01'), cpfHash, borrower.publicKey.toBuffer(), u64LE(amount), u16LE(score), i64LE(expiresAt)])
   const releaseSig = nacl.sign.detached(releaseMessage, admin.secretKey)
 
   const vaultBefore = await bal(conn, vaultTokenAccount)
