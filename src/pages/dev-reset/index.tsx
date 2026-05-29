@@ -8,10 +8,36 @@ const URL_ = import.meta.env.VITE_SUPABASE_URL as string
 export function DevResetScreen() {
   const wallet = useWallet()
   const [busy, setBusy] = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [out, setOut] = useState<{ ok: boolean; msg: string } | null>(null)
 
   const connected = wallet.publicKey?.toBase58()
+
+  const connect = async () => {
+    setConnecting(true)
+    try {
+      const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
+      if (!phantom) {
+        setOut({ ok: false, msg: 'Phantom não detectada' })
+        return
+      }
+      if (wallet.wallet?.adapter?.name !== 'Phantom') {
+        wallet.select(phantom.adapter.name)
+        const start = Date.now()
+        while (Date.now() - start < 1200) {
+          if (wallet.wallet?.adapter?.name === 'Phantom') break
+          await new Promise((r) => setTimeout(r, 30))
+        }
+      }
+      await wallet.connect()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!/reject|cancel|denied|user/i.test(msg)) setOut({ ok: false, msg })
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   const run = async () => {
     if (!connected) return
@@ -46,12 +72,10 @@ export function DevResetScreen() {
         </p>
 
         {!connected ? (
-          <div style={{
-            marginTop: 24, padding: 16, borderRadius: 12,
-            background: 'rgba(220,60,60,0.06)', color: '#B23A3A',
-            border: '1px solid rgba(220,60,60,0.18)', fontSize: 14, fontWeight: 600,
-          }}>
-            Conecte a Phantom primeiro.
+          <div style={{ marginTop: 24 }}>
+            <Button variant="accent" size="lg" loading={connecting} onClick={connect} full>
+              Conectar Phantom
+            </Button>
           </div>
         ) : (
           <div style={{
