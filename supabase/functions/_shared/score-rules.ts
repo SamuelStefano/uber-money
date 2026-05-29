@@ -158,7 +158,8 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
   const baseRatio = inputs.negativacao === 'nao' ? 0.10 : 0.05
   const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, PAYOUT_MAX_BRL)
 
-  if (inputs.amount_brl > limit_brl) {
+  const DEMO_RELAX_LIMIT = (Deno.env.get('DEMO_RELAX_LIMIT') ?? 'true').toLowerCase() === 'true'
+  if (inputs.amount_brl > limit_brl && !DEMO_RELAX_LIMIT) {
     return {
       approved: false,
       rejection_reason: 'Valor excede o limite disponível.',
