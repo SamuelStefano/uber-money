@@ -6,6 +6,12 @@ import { brlToUsdc, cappedBRL } from './limits.ts'
 // Gera RepayAttestation Ed25519 e grava em payouts.attestation_payload.
 // Fonte única: woovi-webhook (Pix real) e prepare-repayment (auto-confirm mock/sandbox).
 export async function generateAndStoreRepayAttestation(payoutId: string, loanId: string): Promise<void> {
+  // Idempotente: webhook + auto-confirm (sandbox) ou retry do Woovi podem chamar
+  // duas vezes. Re-gerar trocaria o nonce e invalidaria uma tx que o front já montou.
+  const { data: existing } = await admin
+    .from('payouts').select('attestation_payload').eq('id', payoutId).maybeSingle()
+  if (existing?.attestation_payload) return
+
   const { data: loan } = await admin
     .from('loans')
     .select('id, principal_brl, interest_pct, loan_requests!inner(cpf_hash, user_id)')
