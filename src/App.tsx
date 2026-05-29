@@ -9,6 +9,7 @@ import { HomeScreen } from '@/pages/home'
 import { RequestScreen } from '@/pages/request'
 import { AnalysisScreen } from '@/pages/analysis'
 import { ApprovedScreen } from '@/pages/approved'
+import { DevResetScreen } from '@/pages/dev-reset'
 import { Store } from '@/store'
 import { useStore } from '@/hooks/use-store'
 import { RouteProvider, type Route } from '@/contexts/route-context'
@@ -44,6 +45,17 @@ function AuthGuard({ route, onForceLogin }: { route: Route; onForceLogin: () => 
 }
 
 function AppInner() {
+  const isDevReset = typeof window !== 'undefined' && window.location.pathname.startsWith('/dev-reset')
+  if (isDevReset) {
+    return (
+      <RouteProvider value={{ route: 'login', goHome: () => { window.location.href = '/' } }}>
+        <AppFrame>
+          <DevResetScreen />
+        </AppFrame>
+      </RouteProvider>
+    )
+  }
+
   const [route, setRoute] = useState<Route>('login')
   const [pendingPayload, setPendingPayload] = useState<LoanRequestPayload | null>(null)
   const [hasNavigated, setHasNavigated] = useState(false)
