@@ -5,6 +5,7 @@ import { withAuth } from '../_shared/with-auth.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
 import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
+import { generateAndStoreRepayAttestation } from '../_shared/repay-attestation.ts'
 
 const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 
@@ -115,6 +116,21 @@ serve((req) => withAuth(req, async (req, user) => {
     .single()
 
   if (insErr || !inserted) return json({ error: insErr?.message ?? 'Insert failed' }, 500, req)
+
+  // mock/sandbox não recebem webhook Woovi: auto-confirma o Pix e gera a attestation
+  // (espelha o auto-confirm do release em request-payout) senão o repay trava em pending.
+  if (WOOVI_MODE !== 'prod') {
+    const payoutId = inserted.id
+    const autoConfirm = async () => {
+      await new Promise((r) => setTimeout(r, 6000))
+      const { data: confirmed } = await admin.from('payouts')
+        .update({ status: 'confirmed', endtoend_id: `MOCK-${correlationId.slice(0, 8)}` })
+        .eq('id', payoutId).eq('status', 'pending').select('id').maybeSingle()
+      if (confirmed) await generateAndStoreRepayAttestation(payoutId, loanId)
+    }
+    ;(globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime
+      ?.waitUntil(autoConfirm())
+  }
 
   return json({
     payoutId: inserted.id,

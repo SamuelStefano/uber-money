@@ -4,7 +4,7 @@ import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
-import { sha256Concat, bufToHex, hexToBuf } from '../_shared/crypto.ts'
+import { deriveCpfHash } from '../_shared/cpf-hash.ts'
 import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 
 const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
@@ -45,18 +45,9 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
     }, 200, req)
   }
 
-  const { data: cnh } = await admin
-    .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
-  const cpfRaw = ((cnh?.ocr_data as any)?.cpf ?? '').replace(/\D/g, '')
-  if (!cpfRaw || cpfRaw.length !== 11) return json({ error: 'CPF not extracted from CNH' }, 400, req)
-  if (!isValidCpf(cpfRaw)) return json({ error: 'CPF da CNH falhou validação módulo 11' }, 400, req)
-
-  const { data: userRow } = await admin.from('users').select('cpf_pepper, wallet').eq('id', userId).maybeSingle()
-  const pepper: Uint8Array | null = userRow?.cpf_pepper ? hexToBuf(userRow.cpf_pepper as string) : null
-  if (!pepper) return json({ error: 'User pepper not initialized' }, 500, req)
-
-  const cpfHash = await sha256Concat(new TextEncoder().encode(cpfRaw), pepper)
-  const cpfHashHex = '\\x' + bufToHex(cpfHash)
+  const derived = await deriveCpfHash(admin, userId)
+  if (!derived.ok) return json({ error: derived.error }, derived.status, req)
+  const { cpfHash, cpfHashHex } = derived
 
   const amountUSDC = brlToUsdc(Number(loan.principal_brl))
   const score = Number((loan as any).loan_requests.score ?? 0)
