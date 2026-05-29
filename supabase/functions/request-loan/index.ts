@@ -2,29 +2,36 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
-import { computeScore } from '../_shared/compute-score.ts'
+import {
+  computeScoreV5,
+  validateScoreInputs,
+  type FinalidadeId,
+  type ScoreBreakdown,
+  type ScoreInputs,
+  type ScoreResult,
+} from '../_shared/score-rules.ts'
 import { buildAttestation, type AttestationPayload } from '../_shared/ed25519-attest.ts'
-
-const MAX_AMOUNT_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10')
-const VALID_REASONS = ['emergency', 'vehicle_repair', 'fuel', 'other'] as const
-type Reason = typeof VALID_REASONS[number]
-
-const LENIENT_MODE = (Deno.env.get('OCR_LENIENT_MODE') ?? 'true').toLowerCase() === 'true'
-const LENIENT_INCOME_DEFAULT = Number(Deno.env.get('OCR_LENIENT_INCOME') ?? '6500')
-const LENIENT_RIDES_DEFAULT = Number(Deno.env.get('OCR_LENIENT_RIDES') ?? '180')
 
 const IDEMPOTENCY_WINDOW_MS = 5 * 60 * 1000
 const LOAN_TENOR_DAYS = 7
 const USDC_DECIMALS = 1e6
 const BRL_PER_USDC = 5
+const PAYOUT_MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10000')
 
-interface RequestBody {
-  amountBRL: number
-  reason: Reason
+type LoanReason = 'emergency' | 'vehicle_repair' | 'fuel' | 'other'
+
+const FINALIDADE_TO_REASON: Record<FinalidadeId, LoanReason> = {
+  pneu: 'vehicle_repair',
+  suspensao: 'vehicle_repair',
+  bateria_chupeta: 'vehicle_repair',
+  bateria_troca: 'vehicle_repair',
+  troca_oleo: 'vehicle_repair',
+  outro: 'other',
 }
 
 interface ResponseBody {
   approved: boolean
+  rejection_reason: string | null
   score: number
   approvedAmountBRL: number
   limit_brl: number
@@ -33,21 +40,20 @@ interface ResponseBody {
   dueDate: string | null
   requestId: string
   attestation: AttestationPayload | null
+  score_breakdown: ScoreBreakdown
 }
 
 serve((req) => withAuth(req, async (req, user) => {
-  let body: RequestBody
-  try { body = await req.json() as RequestBody } catch { return json({ error: 'Invalid JSON' }, 400, req) }
-  if (!body.amountBRL || body.amountBRL <= 0) return json({ error: 'Invalid amount' }, 400, req)
-  if (body.amountBRL > MAX_AMOUNT_BRL) return json({ error: `Amount exceeds cap R$${MAX_AMOUNT_BRL}` }, 400, req)
-  if (!VALID_REASONS.includes(body.reason)) {
-    return json({ error: `Invalid reason — must be one of ${VALID_REASONS.join(', ')}` }, 400, req)
-  }
+  let raw: unknown
+  try { raw = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
+
+  const parsed = validateScoreInputs(raw)
+  if ('error' in parsed) return json(parsed, 400, req)
+  const inputs: ScoreInputs = parsed
 
   const { data: docs } = await admin.from('documents').select('id, kind, ocr_data').eq('user_id', user.id)
-  const printDoc = docs?.find((d) => d.kind === 'print_earnings')
   const cnhDoc = docs?.find((d) => d.kind === 'cnh')
-  if (!printDoc || !cnhDoc) return json({ error: 'Missing required documents (CNH + earnings)' }, 400, req)
+  if (!cnhDoc) return json({ error: 'Missing CNH document' }, 400, req)
 
   const cpfRaw = ((cnhDoc.ocr_data as Record<string, unknown> | null)?.cpf as string | undefined ?? '').replace(/\D/g, '')
 
@@ -78,6 +84,7 @@ serve((req) => withAuth(req, async (req, user) => {
     })
     const resp: ResponseBody = {
       approved: true,
+      rejection_reason: null,
       score: reusedScore,
       approvedAmountBRL: reusedAmount,
       limit_brl: reusedLimit,
@@ -86,52 +93,46 @@ serve((req) => withAuth(req, async (req, user) => {
       dueDate: new Date(Date.now() + LOAN_TENOR_DAYS * 24 * 60 * 60 * 1000).toISOString(),
       requestId: prior.id,
       attestation,
+      score_breakdown: emptyBreakdown(),
     }
     return json(resp, 200, req)
   }
 
-  let ocrData: Record<string, unknown> = (printDoc.ocr_data as Record<string, unknown>) ?? {}
-  const ocrIncome = ocrData.gross_monthly_income
-  if (LENIENT_MODE && (typeof ocrIncome !== 'number' || !ocrIncome)) {
-    console.warn('[request-loan] LENIENT_MODE: OCR sem renda valida, aplicando defaults', {
-      userId: user.id, rawOcr: ocrData,
-    })
-    ocrData = {
-      ...ocrData,
-      gross_monthly_income: LENIENT_INCOME_DEFAULT,
-      ride_count: ocrData.ride_count ?? LENIENT_RIDES_DEFAULT,
-      confidence: 'medium',
-      lenient_applied: true,
-    }
-  }
-
-  const result = computeScore({ userId: user.id, amountBRL: Number(body.amountBRL), ocrData })
-
+  const result: ScoreResult = computeScoreV5(inputs)
   const requestId = crypto.randomUUID()
+  const dbReason = FINALIDADE_TO_REASON[inputs.finalidade_id]
+
   const { error: rpcErr } = await admin.rpc('create_loan_request_with_snapshot', {
     p_id: requestId,
     p_user_id: user.id,
-    p_amount_brl: body.amountBRL,
-    p_reason: body.reason,
+    p_amount_brl: inputs.amount_brl,
+    p_reason: dbReason,
     p_status: result.approved ? 'approved' : 'rejected',
     p_score: result.score,
     p_limit_brl: result.limit_brl,
     p_interest_pct: result.interest_pct,
-    p_inputs: result.inputs,
+    p_inputs: {
+      algorithm_version: 'v5',
+      inputs,
+      breakdown: result.breakdown,
+      rejection_reason: result.rejection_reason,
+      finalidade_id: inputs.finalidade_id,
+    },
   })
   if (rpcErr) return json({ error: rpcErr.message }, 500, req)
 
   const attestation = result.approved
     ? await maybeBuildAttestation({
         cpfRaw, pepperHex, borrowerWallet,
-        score: result.score, amountBRL: body.amountBRL, requestId,
+        score: result.score, amountBRL: inputs.amount_brl, requestId,
       })
     : null
 
   const resp: ResponseBody = {
     approved: result.approved,
+    rejection_reason: result.rejection_reason,
     score: result.score,
-    approvedAmountBRL: result.approved ? body.amountBRL : 0,
+    approvedAmountBRL: result.approved_amount_brl,
     limit_brl: result.limit_brl,
     interestPct: result.interest_pct * 100,
     installments: result.installments,
@@ -140,6 +141,7 @@ serve((req) => withAuth(req, async (req, user) => {
       : null,
     requestId,
     attestation,
+    score_breakdown: result.breakdown,
   }
   return json(resp, 200, req)
 }))
@@ -156,7 +158,7 @@ interface AttestationCtx {
 async function maybeBuildAttestation(ctx: AttestationCtx): Promise<AttestationPayload | null> {
   if (!ctx.cpfRaw || ctx.cpfRaw.length !== 11) return null
   if (!ctx.pepperHex || !ctx.borrowerWallet) return null
-  const amountUSDC = BigInt(Math.round(Math.min(ctx.amountBRL, MAX_AMOUNT_BRL) * USDC_DECIMALS / BRL_PER_USDC))
+  const amountUSDC = BigInt(Math.round(Math.min(ctx.amountBRL, PAYOUT_MAX_BRL) * USDC_DECIMALS / BRL_PER_USDC))
   try {
     return await buildAttestation({
       cpf: ctx.cpfRaw,
@@ -178,3 +180,14 @@ function installmentsFor(amountBRL: number): number {
   return 3
 }
 
+function emptyBreakdown(): ScoreBreakdown {
+  return {
+    tempo_uber: 'ruim',
+    dias_semana: 'ruim',
+    corridas_semana: 'ruim',
+    fonte_renda: 'ruim',
+    nota_motorista: 'ruim',
+    status_veiculo: 'ruim',
+    negativacao: 'ruim',
+  }
+}
