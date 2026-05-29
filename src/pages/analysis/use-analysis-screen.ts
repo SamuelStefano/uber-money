@@ -18,7 +18,7 @@ interface UseAnalysisScreenInput {
 }
 
 async function fetchDecision(payload: LoanRequestPayload): Promise<LoanDecision> {
-  if (HAS_BACKEND) return requestLoan(payload.amountBRL, payload.reason)
+  if (HAS_BACKEND) return requestLoan(payload)
   return requestCreditMock(payload)
 }
 

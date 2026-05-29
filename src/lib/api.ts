@@ -2,6 +2,7 @@
 // Em dev sem env: usa mocks de lib/mock.ts. Em prod: hits reais com JWT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
+import type { LoanRequestPayload, ScoreResult } from '@/types/api'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -108,13 +109,14 @@ export async function getCreditStatus(): Promise<CreditStatus> {
   return r.json()
 }
 
-// DR-001 D3: mapeia IDs do front (pneu/combustivel/...) pro enum loan_reason do backend.
+// DR-001 D3: mapeia IDs do front (pneu/suspensao/...) pro enum loan_reason do backend.
 const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {
   pneu: 'vehicle_repair',
-  combustivel: 'fuel',
-  manutencao: 'vehicle_repair',
+  suspensao: 'vehicle_repair',
+  bateria_chupeta: 'vehicle_repair',
+  bateria_troca: 'vehicle_repair',
+  troca_oleo: 'vehicle_repair',
   outro: 'other',
-  emergencia: 'emergency',
 }
 
 interface LoanRequestResponse {
@@ -129,9 +131,21 @@ interface LoanRequestResponse {
   attestation: ScoreAttestation | null
 }
 
-export async function requestLoan(amountBRL: number, reason: string): Promise<LoanDecision> {
-  const mapped = REASON_MAP[reason] ?? 'other'
-  const r = await authedFetch('request-loan', { amountBRL, reason: mapped })
+export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDecision> {
+  const mapped = REASON_MAP[payload.reason] ?? 'other'
+  const body = {
+    amountBRL: payload.amountBRL,
+    reason: mapped,
+    otherText: payload.otherText,
+    tempo_uber_meses: payload.tempo_uber_meses,
+    dias_semana: payload.dias_semana,
+    corridas_semana: payload.corridas_semana,
+    fonte_renda: payload.fonte_renda,
+    nota_motorista: payload.nota_motorista,
+    status_veiculo: payload.status_veiculo,
+    negativacao: payload.negativacao,
+  }
+  const r = await authedFetch('request-loan', body)
   if (!r.ok) throw new Error(`request-loan: ${r.status} ${await r.text()}`)
   const data: LoanRequestResponse = await r.json()
   return {
@@ -146,6 +160,23 @@ export async function requestLoan(amountBRL: number, reason: string): Promise<Lo
     attestation: data.attestation ?? undefined,
     limit_brl: data.limit_brl,
   }
+}
+
+export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResult> {
+  const r = await authedFetch('score-credit', {
+    amountBRL: inputs.amountBRL,
+    reason: REASON_MAP[inputs.reason] ?? 'other',
+    otherText: inputs.otherText,
+    tempo_uber_meses: inputs.tempo_uber_meses,
+    dias_semana: inputs.dias_semana,
+    corridas_semana: inputs.corridas_semana,
+    fonte_renda: inputs.fonte_renda,
+    nota_motorista: inputs.nota_motorista,
+    status_veiculo: inputs.status_veiculo,
+    negativacao: inputs.negativacao,
+  })
+  if (!r.ok) throw new Error(`score-credit: ${r.status} ${await r.text()}`)
+  return r.json() as Promise<ScoreResult>
 }
 
 export interface ConfirmLoanResponse {
