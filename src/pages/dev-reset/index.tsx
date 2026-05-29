@@ -30,7 +30,15 @@ export function DevResetScreen() {
           await new Promise((r) => setTimeout(r, 30))
         }
       }
-      await wallet.connect()
+      try {
+        await wallet.connect()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (/WalletNotSelected/i.test(msg)) {
+          await new Promise((r) => setTimeout(r, 300))
+          await wallet.connect()
+        } else throw e
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (!/reject|cancel|denied|user/i.test(msg)) setOut({ ok: false, msg })
