@@ -36,3 +36,44 @@ export interface ScoreResult {
   installments: number
   approved_amount_brl: number
 }
+
+export interface RepayAttestationPayload {
+  signatureHex: string
+  messageHex: string
+  expiresAt: number
+  nonceHex: string
+  loanPdaBase58: string
+  borrowerBase58: string
+  amountPaidUsdc: string
+}
+
+export interface PrepareRepaymentRequest {
+  loanId: string
+}
+
+export interface PrepareRepaymentResponse {
+  payoutId: string
+  correlationId: string
+  brcode: string
+  qrCodeImage: string
+  amountBRL: number
+  amountUSDC: string
+  loanPda: string
+  status: 'pending' | 'confirmed'
+  mode: 'mock' | 'sandbox' | 'prod'
+  expiresAt: string | null
+  attestation: RepayAttestationPayload | null
+}
+
+export interface ConfirmRepaymentRequest {
+  loanId: string
+  txRepay: string
+}
+
+export interface ConfirmRepaymentResponse {
+  loanId: string
+  status: 'paid'
+  txRepay: string
+  repaidAt: string
+  explorer: string
+}

@@ -79,8 +79,54 @@ serve(async (req) => {
   if (updErr) return json({ error: updErr.message }, 500)
 
   if (updated && localStatus === 'confirmed' && updated.kind === 'repay') {
-    await admin.from('loans').update({ status: 'paid' }).eq('id', updated.loan_id)
+    // Gera RepayAttestation Ed25519 pra front re-assinar tx Anchor repay_loan.
+    // NÃO marca loans.status='paid' aqui — só confirm-repayment faz isso após tx onchain confirmar.
+    await generateAndStoreRepayAttestation(updated.id, updated.loan_id)
   }
 
   return json({ received: true, correlationId, status: localStatus })
 })
+
+async function generateAndStoreRepayAttestation(payoutId: string, loanId: string): Promise<void> {
+  const { data: loan } = await admin
+    .from('loans')
+    .select('id, principal_brl, interest_pct, on_chain_pda, loan_requests!inner(cpf_hash, user_id)')
+    .eq('id', loanId)
+    .maybeSingle()
+  if (!loan) { console.error('[woovi-webhook] loan not found', { loanId }); return }
+
+  const { data: userRow } = await admin
+    .from('users').select('wallet').eq('id', loan.loan_requests.user_id).maybeSingle()
+  if (!userRow?.wallet) { console.error('[woovi-webhook] user wallet missing', { loanId }); return }
+
+  const { data: payoutRow } = await admin
+    .from('payouts').select('loan_pda_address').eq('id', payoutId).maybeSingle()
+  const loanPdaBase58 = payoutRow?.loan_pda_address ?? loan.on_chain_pda
+  if (!loanPdaBase58) { console.error('[woovi-webhook] loan_pda missing'); return }
+
+  const cpfHashHex = typeof loan.loan_requests.cpf_hash === 'string'
+    ? loan.loan_requests.cpf_hash.replace(/^\\x/, '')
+    : Array.from(loan.loan_requests.cpf_hash as Uint8Array).map((b) => b.toString(16).padStart(2, '0')).join('')
+  const cpfHash = hexToBytes(cpfHashHex)
+
+  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
+  const loanPda = new PublicKey(loanPdaBase58).toBytes()
+  const borrower = new PublicKey(userRow.wallet).toBytes()
+
+  const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
+  const amountUSDC = BigInt(Math.round(Math.min(amountBRL, 10000) * 1e6 / 5))
+
+  const { buildRepayAttestation } = await import('../_shared/ed25519-attest-repay.ts')
+  const attestation = await buildRepayAttestation({
+    cpfHash, loanPda, borrower, amountPaidUsdc: amountUSDC,
+  })
+
+  await admin.from('payouts').update({ attestation_payload: attestation }).eq('id', payoutId)
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.replace(/^0x/, '')
+  const out = new Uint8Array(clean.length / 2)
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i*2, i*2+2), 16)
+  return out
+}

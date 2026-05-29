@@ -11,9 +11,10 @@ import type { LoanDecision } from '@/types/domain'
 interface ApprovedScreenProps {
   decision: LoanDecision
   onHome: () => void
+  onRepay?: () => void
 }
 
-export function ApprovedScreen({ decision, onHome }: ApprovedScreenProps) {
+export function ApprovedScreen({ decision, onHome, onRepay }: ApprovedScreenProps) {
   const a = useApprovedScreen({ decision })
   if (!decision) return null
 
@@ -33,6 +34,7 @@ export function ApprovedScreen({ decision, onHome }: ApprovedScreenProps) {
           onSacar={a.sacar}
           onShowReceipt={() => a.setShowReceipt(true)}
           onHome={onHome}
+          onRepay={onRepay}
         />
         <PixNotification show={a.showNotif} amountBRL={decision.approvedAmountBRL} />
 

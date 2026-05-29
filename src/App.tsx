@@ -9,6 +9,7 @@ import { HomeScreen } from '@/pages/home'
 import { RequestScreen } from '@/pages/request'
 import { AnalysisScreen } from '@/pages/analysis'
 import { ApprovedScreen } from '@/pages/approved'
+import { RepayScreen } from '@/pages/repay'
 import { DevResetScreen } from '@/pages/dev-reset'
 import { Store } from '@/store'
 import { useStore } from '@/hooks/use-store'
@@ -114,7 +115,10 @@ function AppInner() {
               />
             )}
             {route === 'approved' && lastDecision && (
-              <ApprovedScreen decision={lastDecision} onHome={() => go('home', -1)} />
+              <ApprovedScreen decision={lastDecision} onHome={() => go('home', -1)} onRepay={() => go('repay', 1)} />
+            )}
+            {route === 'repay' && lastDecision && (
+              <RepayScreen decision={lastDecision} onHome={() => go('home', -1)} />
             )}
           </motion.div>
         </AnimatePresence>

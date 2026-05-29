@@ -29,6 +29,10 @@ const MAX_AMOUNT_USDC: u64 = 10_000_000;
 const VAULT_SEED: &[u8] = b"vault";
 const LOAN_SEED: &[u8] = b"loan";
 
+// DR-007 D1: status do Loan onchain (0=Active=padrão pós-init zerado, 1=Repaid)
+const LOAN_STATUS_ACTIVE: u8 = 0;
+const LOAN_STATUS_REPAID: u8 = 1;
+
 // Oracle pubkey — admin keypair que assina attestations off-chain.
 // Mesma key da Vault.authority (devnet single-key Tainan/Samuel).
 // Usado em verify_ed25519_attestation pra confirmar que score vem do nosso oracle.
@@ -236,6 +240,74 @@ pub mod uber_money {
         });
         Ok(())
     }
+
+    /// DR-007 — Marker-only repayment (sem CPI USDC; vault contabilmente
+    /// desbalanceada pós-repay até V2 com USDC return + close PDA).
+    ///
+    /// Pre-condições:
+    ///   - Ix anterior na tx DEVE ser Ed25519 verify program com:
+    ///     * signer pubkey = ORACLE_PUBKEY
+    ///     * message = layout REPAY_V1 (ver verify_ed25519_repay_attestation)
+    ///   - Loan PDA está Active (status==0)
+    ///   - borrower (signer) == loan.borrower (has_one)
+    ///
+    /// Faz:
+    ///   1. Valida status Active + expires_at não passou
+    ///   2. Scan Ed25519 attestation prepended
+    ///   3. Marca loan.status=Repaid + grava repaid_at, repay_amount_usdc, repay_nonce
+    pub fn repay_loan(
+        ctx: Context<RepayLoan>,
+        cpf_hash: [u8; 32],
+        amount_paid_usdc: u64,
+        nonce: [u8; 8],
+        expires_at: i64,
+    ) -> Result<()> {
+        let loan = &mut ctx.accounts.loan;
+        require!(loan.status == LOAN_STATUS_ACTIVE, UberError::LoanAlreadyRepaid);
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(now <= expires_at, UberError::AttestationExpired);
+
+        let ix_sysvar = &ctx.accounts.instructions_sysvar;
+        let mut ed25519_data: Option<Vec<u8>> = None;
+        for i in 0u16..16u16 {
+            match load_instruction_at_checked(i as usize, ix_sysvar) {
+                Ok(ix) => {
+                    if ix.program_id == ED25519_PROGRAM_ID {
+                        ed25519_data = Some(ix.data);
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let ed25519_data = ed25519_data.ok_or(UberError::MissingAttestation)?;
+
+        verify_ed25519_repay_attestation(
+            &ed25519_data,
+            &ORACLE_PUBKEY,
+            cpf_hash,
+            loan.key(),
+            ctx.accounts.borrower.key(),
+            amount_paid_usdc,
+            nonce,
+            expires_at,
+        )?;
+
+        loan.status = LOAN_STATUS_REPAID;
+        loan.repaid_at = now;
+        loan.repay_amount_usdc = amount_paid_usdc;
+        loan.repay_nonce = nonce;
+
+        emit!(LoanRepaid {
+            borrower: ctx.accounts.borrower.key(),
+            cpf_hash,
+            loan: loan.key(),
+            amount_paid_usdc,
+            repaid_at: now,
+        });
+        Ok(())
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -288,6 +360,59 @@ fn verify_ed25519_attestation(
 
     let actual_msg = &data[msg_offset..msg_offset + msg_size];
     require!(actual_msg == expected.as_slice(), UberError::AttestationMismatch);
+
+    Ok(())
+}
+
+/// DR-007 D3 — Parse + valida Ed25519 attestation pra repay.
+///
+/// Mesmo layout do Ed25519Program nativo (ver verify_ed25519_attestation),
+/// mas o `message` segue o layout REPAY_V1 (128 bytes):
+///
+/// ```text
+/// b"REPAY_V1"(8) || cpf_hash(32) || loan_pda(32) || borrower(32)
+///                || amount_paid_usdc LE(8) || nonce(8) || expires_at LE(8)
+/// ```
+///
+/// Domain separator `REPAY_V1` previne colisão cross-protocol com release.
+/// `loan_pda` + `borrower` previnem wallet swap e replay cross-loan.
+fn verify_ed25519_repay_attestation(
+    data: &[u8],
+    expected_signer: &Pubkey,
+    cpf_hash: [u8; 32],
+    loan_pda: Pubkey,
+    borrower: Pubkey,
+    amount_paid_usdc: u64,
+    nonce: [u8; 8],
+    expires_at: i64,
+) -> Result<()> {
+    require!(data.len() >= 16, UberError::InvalidRepayAttestationLayout);
+    require!(data[0] == 1, UberError::InvalidRepayAttestationLayout);
+
+    let pubkey_offset = u16::from_le_bytes([data[6], data[7]]) as usize;
+    let msg_offset = u16::from_le_bytes([data[10], data[11]]) as usize;
+    let msg_size = u16::from_le_bytes([data[12], data[13]]) as usize;
+
+    require!(pubkey_offset + 32 <= data.len(), UberError::InvalidRepayAttestationLayout);
+    require!(msg_offset + msg_size <= data.len(), UberError::InvalidRepayAttestationLayout);
+
+    let signer_bytes = &data[pubkey_offset..pubkey_offset + 32];
+    require!(
+        signer_bytes == expected_signer.to_bytes(),
+        UberError::WrongOracleSigner
+    );
+
+    let mut expected = Vec::with_capacity(128);
+    expected.extend_from_slice(b"REPAY_V1");
+    expected.extend_from_slice(&cpf_hash);
+    expected.extend_from_slice(&loan_pda.to_bytes());
+    expected.extend_from_slice(&borrower.to_bytes());
+    expected.extend_from_slice(&amount_paid_usdc.to_le_bytes());
+    expected.extend_from_slice(&nonce);
+    expected.extend_from_slice(&expires_at.to_le_bytes());
+
+    let actual_msg = &data[msg_offset..msg_offset + msg_size];
+    require!(actual_msg == expected.as_slice(), UberError::RepayAttestationMismatch);
 
     Ok(())
 }
@@ -386,6 +511,23 @@ pub struct ReleaseLoan<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(cpf_hash: [u8; 32])]
+pub struct RepayLoan<'info> {
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [LOAN_SEED, cpf_hash.as_ref()],
+        bump = loan.bump,
+        has_one = borrower,
+    )]
+    pub loan: Account<'info, Loan>,
+    /// CHECK: sysvar instructions (validado por endereço)
+    #[account(address = INSTRUCTIONS_SYSVAR_ID)]
+    pub instructions_sysvar: AccountInfo<'info>,
+}
+
 // ─── State ────────────────────────────────────────────────────────────────
 
 #[account]
@@ -409,9 +551,15 @@ pub struct Loan {
     pub released_at: i64,
     pub usdc_feed_answer: i128,  // snapshot do Chainlink USDC/USD no momento (DR-004)
     pub bump: u8,
+    // DR-007 V2 — repayment fields (append-only; PDAs antigas devnet ficam órfãs, OK pra hackathon)
+    pub status: u8,                    // LOAN_STATUS_ACTIVE | LOAN_STATUS_REPAID
+    pub repaid_at: i64,                // 0 = unset
+    pub repay_amount_usdc: u64,        // 0 = unset
+    pub repay_nonce: [u8; 8],          // anti-replay (= payouts.id trimado)
 }
 impl Loan {
-    pub const SIZE: usize = 32 + 32 + 8 + 2 + 8 + 16 + 1;
+    pub const SIZE_V1: usize = 32 + 32 + 8 + 2 + 8 + 16 + 1;
+    pub const SIZE: usize = Self::SIZE_V1 + 1 + 8 + 8 + 8;
 }
 
 #[event]
@@ -431,6 +579,15 @@ pub struct LoanReleasedOnChain {
     pub score: u16,
     pub usdc_feed_answer: i128,
     pub timestamp: i64,
+}
+
+#[event]
+pub struct LoanRepaid {
+    pub borrower: Pubkey,
+    pub cpf_hash: [u8; 32],
+    pub loan: Pubkey,
+    pub amount_paid_usdc: u64,
+    pub repaid_at: i64,
 }
 
 #[error_code]
@@ -459,6 +616,12 @@ pub enum UberError {
     FeedReadFailed,
     #[msg("Market crash detected via Chainlink Data Feed (SOL/USD below threshold) — empréstimo bloqueado")]
     MarketCrashHalt,
+    #[msg("Loan already repaid")]
+    LoanAlreadyRepaid,
+    #[msg("Repay attestation layout invalid")]
+    InvalidRepayAttestationLayout,
+    #[msg("Repay attestation message mismatch")]
+    RepayAttestationMismatch,
 }
 
 #[event]

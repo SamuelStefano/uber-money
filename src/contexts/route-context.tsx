@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 
-type Route = 'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved'
+type Route = 'login' | 'upload' | 'home' | 'request' | 'analysis' | 'approved' | 'repay'
 
 interface RouteContextValue {
   route: Route

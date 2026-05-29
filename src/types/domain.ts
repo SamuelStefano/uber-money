@@ -36,6 +36,9 @@ export interface LoanDecision {
   attestation?: ScoreAttestation
   limit_brl?: number
   score_breakdown?: ScoreBreakdownDecision
+  txRepay?: string | null
+  repaidAt?: string | null
+  loanStatus?: 'open' | 'paid' | 'late'
 }
 
 export interface PayoutReceipt {
@@ -55,3 +58,13 @@ export interface ActivityItem {
   sub: string
   timestamp: string
 }
+
+export type RepayPhase =
+  | 'idle'
+  | 'generating'
+  | 'pix_pending'
+  | 'pix_confirmed'
+  | 'signing'
+  | 'tx_pending'
+  | 'done'
+  | 'error'

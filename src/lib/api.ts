@@ -2,7 +2,7 @@
 // Em dev sem env: usa mocks de lib/mock.ts. Em prod: hits reais com JWT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
-import type { LoanRequestPayload, ScoreResult } from '@/types/api'
+import type { LoanRequestPayload, ScoreResult, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -337,4 +337,16 @@ export async function fileToBase64(file: File): Promise<string> {
     r.onerror = reject
     r.readAsDataURL(file)
   })
+}
+
+export async function prepareRepayment(loanId: string): Promise<PrepareRepaymentResponse> {
+  const r = await authedFetch('prepare-repayment', { loanId } satisfies PrepareRepaymentRequest)
+  if (!r.ok) throw new Error(`prepare-repayment: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
+export async function confirmRepayment(loanId: string, txRepay: string): Promise<ConfirmRepaymentResponse> {
+  const r = await authedFetch('confirm-repayment', { loanId, txRepay } satisfies ConfirmRepaymentRequest)
+  if (!r.ok) throw new Error(`confirm-repayment: ${r.status} ${await r.text()}`)
+  return r.json()
 }

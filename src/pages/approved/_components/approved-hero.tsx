@@ -22,9 +22,10 @@ interface ApprovedHeroProps {
   onSacar: () => void
   onShowReceipt: () => void
   onHome: () => void
+  onRepay?: () => void
 }
 
-export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onShowReceipt, onHome }: ApprovedHeroProps) {
+export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onShowReceipt, onHome, onRepay }: ApprovedHeroProps) {
   const usdcReceived = phase === 'usdc_received' || phase === 'sacando' || phase === 'done'
 
   return (
@@ -131,13 +132,20 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
             )}
           </>
         ) : (
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-            <Button variant="primary" size="lg" onClick={onShowReceipt} icon={<Icon.CheckCircle />} style={{ minWidth: 220 }}>
-              Ver comprovante
-            </Button>
-            <Button variant="secondary" size="lg" onClick={onHome} style={{ minWidth: 220 }}>
-              Voltar pro início
-            </Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <Button variant="primary" size="lg" onClick={onShowReceipt} icon={<Icon.CheckCircle />} style={{ minWidth: 220 }}>
+                Ver comprovante
+              </Button>
+              <Button variant="secondary" size="lg" onClick={onHome} style={{ minWidth: 220 }}>
+                Voltar pro início
+              </Button>
+            </div>
+            {onRepay && (
+              <Button variant="primary" size="lg" onClick={onRepay} style={{ minWidth: 220 }}>
+                Pagar empréstimo
+              </Button>
+            )}
           </div>
         )}
       </div>
