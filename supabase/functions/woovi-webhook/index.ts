@@ -3,7 +3,7 @@ import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared
 import { admin } from '../_shared/admin.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
 import { deriveLoanPda, PublicKey } from '../_shared/anchor-signer.ts'
-import { brlToUsdc } from '../_shared/limits.ts'
+import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
 
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
@@ -114,7 +114,7 @@ async function generateAndStoreRepayAttestation(payoutId: string, loanId: string
   const loanPda = loanPdaPubkey.toBytes()
   const borrower = new PublicKey(userRow.wallet).toBytes()
 
-  const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
+  const amountBRL = cappedBRL(Number(loan.principal_brl) * (1 + Number(loan.interest_pct)))
   const amountUSDC = brlToUsdc(amountBRL)
 
   const { buildRepayAttestation } = await import('../_shared/ed25519-attest-repay.ts')

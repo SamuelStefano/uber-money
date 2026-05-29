@@ -120,17 +120,34 @@ serve((req) => withAuth(req, async (req, user) => {
   }
 
   // CRIT-1 fix: grava o intent uniqueness-bearing (usdc_received) ANTES de
-  // inserir payout / chamar Woovi. Os índices únicos parciais (sig, loan_id)
-  // da migration 0010 fecham a corrida ANTES de qualquer Pix sair.
+  // inserir payout / chamar Woovi. Os índices únicos parciais (sig, loan_id) da
+  // migration 0010 fecham a corrida ANTES de qualquer Pix sair. Usa INSERT puro
+  // (fail-closed) — não upsert DO UPDATE, senão o perdedor de uma corrida com
+  // mesmo client_intent_id seguiria pra uma segunda cobrança. Tentativa anterior
+  // 'failed' é apagada antes pra um retry legítimo reclamar o slot.
   const correlationId = crypto.randomUUID()
-  const { error: intentErr } = await admin.from('cashout_intents').upsert({
+  await admin.from('cashout_intents').delete()
+    .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId).eq('status', 'failed')
+  const { error: intentErr } = await admin.from('cashout_intents').insert({
     source: 'uber_money', client_intent_id: body.clientIntentId, user_id: user.id,
     loan_id: body.loanId, amount_usdc: Number(amountUSDC), amount_brl: amountBRL,
     pix_key: body.pixKey, pix_key_type: body.pixKeyType,
     solana_signature: body.cashOutTxSig, status: 'usdc_received',
-  }, { onConflict: 'source,client_intent_id' })
+  })
   if (intentErr) {
-    if (intentErr.code === '23505') return json({ error: 'cash_out already consumed' }, 409, req)
+    if (intentErr.code === '23505') {
+      const { data: winner } = await admin.from('cashout_intents')
+        .select('pix_payout_id, status, amount_brl').eq('source', 'uber_money')
+        .eq('client_intent_id', body.clientIntentId).neq('status', 'failed').maybeSingle()
+      if (winner) {
+        return json({
+          payoutId: winner.pix_payout_id ?? '', status: winner.status,
+          amountBRL: Number(winner.amount_brl), txCashOut: body.cashOutTxSig,
+          mode: WOOVI_MODE, resumed: true,
+        }, 200, req)
+      }
+      return json({ error: 'cash_out already consumed' }, 409, req)
+    }
     return json({ error: intentErr.message }, 500, req)
   }
 
@@ -143,7 +160,12 @@ serve((req) => withAuth(req, async (req, user) => {
     })
     .select('id')
     .single()
-  if (payoutErr) return json({ error: payoutErr.message }, 500, req)
+  if (payoutErr) {
+    // libera o slot pro retry — senão o intent fica preso em 'usdc_received' sem payout
+    await admin.from('cashout_intents').update({ status: 'failed', error_message: payoutErr.message })
+      .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)
+    return json({ error: payoutErr.message }, 500, req)
+  }
 
   await admin.from('cashout_intents').update({ pix_payout_id: payout.id })
     .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)

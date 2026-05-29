@@ -4,7 +4,7 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
-import { brlToUsdc } from '../_shared/limits.ts'
+import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
 
 const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 
@@ -25,7 +25,7 @@ serve((req) => withAuth(req, async (req, user) => {
   if ((loan as any).loan_requests.user_id !== user.id) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: `Loan status is ${loan.status}, cannot repay` }, 409, req)
 
-  const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
+  const amountBRL = cappedBRL(Number(loan.principal_brl) * (1 + Number(loan.interest_pct)))
   const amountUSDC = brlToUsdc(amountBRL)
 
   const { data: existing } = await admin

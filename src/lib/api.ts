@@ -237,12 +237,14 @@ export async function requestPayout(loanId: string, pixKey: string, pixKeyType: 
 export interface CashOutToPixResponse {
   payoutId: string
   status: string
-  correlationId: string
   amountBRL: number
-  amountUSDC: number
   txCashOut: string
-  explorer: string
   mode: string
+  // ausentes no path idempotente (resumed) — só o fluxo fresh os popula
+  correlationId?: string
+  amountUSDC?: number
+  explorer?: string
+  resumed?: boolean
 }
 
 export async function cashOutToPix(args: {

@@ -39,12 +39,16 @@ serve((req) => withAuth(req, async (req, user) => {
       const slice = reqIds.slice(i, i + 100)
       const { data: loans } = await admin.from('loans').select('id').in('request_id', slice)
       const loanIds = (loans ?? []).map((l: { id: string }) => l.id)
+      // cashout_intents tem FK ON DELETE RESTRICT em loan_id e pix_payout_id;
+      // apaga antes de payouts/loans senão o wipe viola a constraint.
+      if (loanIds.length) await admin.from('cashout_intents').delete().in('loan_id', loanIds)
       if (loanIds.length) await admin.from('payouts').delete().in('loan_id', loanIds)
       await admin.from('score_snapshots').delete().in('request_id', slice)
       await admin.from('loans').delete().in('request_id', slice)
       await admin.from('loan_requests').delete().in('id', slice)
     }
   }
+  await admin.from('cashout_intents').delete().eq('user_id', userId)
 
   await admin.from('documents').delete().eq('user_id', userId)
   await admin.from('users').delete().eq('id', userId)
