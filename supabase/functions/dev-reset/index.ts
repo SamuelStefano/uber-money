@@ -1,16 +1,8 @@
-// dev-reset — endpoint escondido pra resetar uma wallet pra demo/vídeo.
-// Apaga loans/payouts/score_snapshots/loan_requests/documents (DB + storage) + auth.users,
-// mantendo nada — depois disso o user re-conecta wallet e passa pelo signup completo.
-// Protegido por header X-Dev-Secret == DEV_RESET_SECRET (env Supabase).
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonOpen, handleOptionsOpen } from '../_shared/cors.ts'
+import { admin } from '../_shared/admin.ts'
 
-const URL_ = Deno.env.get('SUPABASE_URL')!
-const KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const SECRET = Deno.env.get('DEV_RESET_SECRET') ?? ''
-
-const admin = createClient(URL_, KEY)
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return handleOptionsOpen()

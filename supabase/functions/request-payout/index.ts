@@ -49,6 +49,7 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
     .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
   const cpfRaw = ((cnh?.ocr_data as any)?.cpf ?? '').replace(/\D/g, '')
   if (!cpfRaw || cpfRaw.length !== 11) return json({ error: 'CPF not extracted from CNH' }, 400, req)
+  if (!isValidCpf(cpfRaw)) return json({ error: 'CPF da CNH falhou validação módulo 11' }, 400, req)
 
   const { data: userRow } = await admin.from('users').select('cpf_pepper, wallet').eq('id', userId).maybeSingle()
   const pepper: Uint8Array | null = userRow?.cpf_pepper ? hexToBuf(userRow.cpf_pepper as string) : null

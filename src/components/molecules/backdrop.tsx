@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { motion } from 'framer-motion'
 
 type BackdropVariant = 'home' | 'login-hero' | 'login-panel'
@@ -10,7 +11,7 @@ interface BackdropProps {
 interface BeamConfig {
   top: string
   direction: 'ltr' | 'rtl'
-  gradientId: string
+  gradientKey: string
   color: string
   peakAlpha: number
   opacity: number

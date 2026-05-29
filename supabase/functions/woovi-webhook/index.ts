@@ -1,29 +1,17 @@
-// woovi-webhook — fail-closed HMAC + handle sha256= prefix + idempotent update.
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared/cors.ts'
+import { admin } from '../_shared/admin.ts'
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
-// ⚠️ Skip HMAC só pra sandbox enquanto não temos o secret no painel.
-// NUNCA ativar em prod — qualquer chamada externa fica aceita.
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
+const LOCAL_DEV = Deno.env.get('LOCAL_DEV') === 'true'
+const ENVIRONMENT = Deno.env.get('ENVIRONMENT')
+const ALLOWED_INSECURE_ENVS = new Set(['sandbox', 'staging', 'local'])
 
-function isProduction(): boolean {
-  if (Deno.env.get('LOCAL_DEV')) return false
-  if (Deno.env.get('ENVIRONMENT') === 'production') return true
-  if (Deno.env.get('SUPABASE_DB_URL')?.includes('supabase.co')) return true
-  return false
+if (INSECURE_MODE && !LOCAL_DEV && !ALLOWED_INSECURE_ENVS.has(ENVIRONMENT ?? '')) {
+  console.error('[woovi-webhook] INSECURE_MODE bloqueado: ENVIRONMENT fora da whitelist', { ENVIRONMENT })
+  throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true exige ENVIRONMENT in {sandbox,staging,local} ou LOCAL_DEV=true')
 }
-
-if (INSECURE_MODE && isProduction()) {
-  console.error('[woovi-webhook] INSECURE_MODE não permitido em prod')
-  // Fail hard at startup so the function never serves requests insecurely in prod.
-  throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true não é permitido em ambiente de produção')
-}
-
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
 
 async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
   const sig = signature.startsWith('sha256=') ? signature.slice(7) : signature

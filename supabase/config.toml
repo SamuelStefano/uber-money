@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.request-loan]
 verify_jwt = false
 
+[functions.confirm-loan]
+verify_jwt = false
+
 [functions.process-document]
 verify_jwt = false
 
