@@ -17,7 +17,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: loan } = await admin
     .from('loans')
-    .select('id, request_id, principal_brl, interest_pct, status, on_chain_pda, loan_requests!inner(user_id, cpf_hash)')
+    .select('id, request_id, principal_brl, interest_pct, status, loan_requests!inner(user_id, cpf_hash)')
     .eq('id', loanId)
     .maybeSingle()
 
@@ -36,23 +36,6 @@ serve((req) => withAuth(req, async (req, user) => {
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
 
-  if (existing) {
-    const woovi = (existing.woovi_payload ?? {}) as Record<string, unknown>
-    return json({
-      payoutId: existing.id,
-      correlationId: existing.woovi_correlation_id,
-      brcode: (woovi.brcode as string) ?? '',
-      qrCodeImage: (woovi.qrCodeImage as string) ?? '',
-      amountBRL,
-      amountUSDC: amountUSDC.toString(),
-      loanPda: (loan as any).on_chain_pda ?? '',
-      status: existing.status,
-      mode: WOOVI_MODE,
-      expiresAt: (woovi.expiresAt as string) ?? null,
-      attestation: existing.attestation_payload ?? null,
-    }, 200, req)
-  }
-
   const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
   const cpfHashBytes = typeof cpfHashRaw === 'string'
     ? hexToBytes(cpfHashRaw)
@@ -66,6 +49,23 @@ serve((req) => withAuth(req, async (req, user) => {
     new PublicKey(PROGRAM_ID),
   )
   const loanPda = loanPdaPubkey.toBase58()
+
+  if (existing) {
+    const woovi = (existing.woovi_payload ?? {}) as Record<string, unknown>
+    return json({
+      payoutId: existing.id,
+      correlationId: existing.woovi_correlation_id,
+      brcode: (woovi.brcode as string) ?? '',
+      qrCodeImage: (woovi.qrCodeImage as string) ?? '',
+      amountBRL,
+      amountUSDC: amountUSDC.toString(),
+      loanPda,
+      status: existing.status,
+      mode: WOOVI_MODE,
+      expiresAt: (woovi.expiresAt as string) ?? null,
+      attestation: existing.attestation_payload ?? null,
+    }, 200, req)
+  }
 
   const correlationId = crypto.randomUUID()
 

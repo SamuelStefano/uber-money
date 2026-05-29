@@ -4,7 +4,7 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 
 const ENVIRONMENT = (Deno.env.get('ENVIRONMENT') ?? '').toLowerCase()
-const ALLOWED_ENVS = new Set(['development', 'sandbox', 'staging', 'local', ''])
+const ALLOWED_ENVS = new Set(['development', 'sandbox', 'staging', 'local'])
 
 serve((req) => withAuth(req, async (req, user) => {
   if (!ALLOWED_ENVS.has(ENVIRONMENT)) {

@@ -105,7 +105,21 @@ serve((req) => withAuth(req, async (req, user) => {
     return json({ error: 'cash_out verification failed', details: verifyErr }, 422, req)
   }
 
+  // CRIT-1 fix: grava o intent uniqueness-bearing (usdc_received) ANTES de
+  // inserir payout / chamar Woovi. Os índices únicos parciais (sig, loan_id)
+  // da migration 0010 fecham a corrida ANTES de qualquer Pix sair.
   const correlationId = crypto.randomUUID()
+  const { error: intentErr } = await admin.from('cashout_intents').upsert({
+    source: 'uber_money', client_intent_id: body.clientIntentId, user_id: user.id,
+    loan_id: body.loanId, amount_usdc: Number(amountUSDC), amount_brl: amountBRL,
+    pix_key: body.pixKey, pix_key_type: body.pixKeyType,
+    solana_signature: body.cashOutTxSig, status: 'usdc_received',
+  }, { onConflict: 'source,client_intent_id' })
+  if (intentErr) {
+    if (intentErr.code === '23505') return json({ error: 'cash_out already consumed' }, 409, req)
+    return json({ error: intentErr.message }, 500, req)
+  }
+
   const { data: payout, error: payoutErr } = await admin
     .from('payouts')
     .insert({
@@ -117,12 +131,8 @@ serve((req) => withAuth(req, async (req, user) => {
     .single()
   if (payoutErr) return json({ error: payoutErr.message }, 500, req)
 
-  await admin.from('cashout_intents').upsert({
-    source: 'uber_money', client_intent_id: body.clientIntentId, user_id: user.id,
-    loan_id: body.loanId, amount_usdc: Number(amountUSDC), amount_brl: amountBRL,
-    pix_key: body.pixKey, pix_key_type: body.pixKeyType,
-    solana_signature: body.cashOutTxSig, pix_payout_id: payout.id, status: 'usdc_received',
-  }, { onConflict: 'source,client_intent_id' })
+  await admin.from('cashout_intents').update({ pix_payout_id: payout.id })
+    .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)
 
   let charge
   try {
