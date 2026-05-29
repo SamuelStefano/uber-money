@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { Connection, PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.3?target=denonext'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
@@ -52,6 +51,13 @@ serve((req) => withAuth(req, async (req, user) => {
   const onChain = await verifyTxOnChain(body.txRelease)
   if (!onChain.ok) return json({ error: onChain.error }, 400, req)
 
+  if (request.cpf_hash) {
+    const loanPdaExists = await verifyLoanPdaExists(request.cpf_hash as string)
+    if (!loanPdaExists) {
+      return json({ error: 'Loan PDA not found on-chain for this cpf_hash' }, 400, req)
+    }
+  }
+
   const { data: userRow } = await admin
     .from('users').select('wallet').eq('id', user.id).maybeSingle()
   const borrower = (userRow?.wallet as string | undefined) ?? null
@@ -99,21 +105,53 @@ serve((req) => withAuth(req, async (req, user) => {
 
 async function verifyTxOnChain(txSig: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const conn = new Connection(RPC_URL, 'confirmed')
-    const tx = await conn.getTransaction(txSig, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
+    const r = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getTransaction',
+        params: [txSig, { commitment: 'confirmed', maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }],
+      }),
+    })
+    const data = await r.json() as { result?: { meta?: { err?: unknown }, transaction?: { message?: { accountKeys?: Array<string | { pubkey: string }> } } } }
+    const tx = data.result
     if (!tx) return { ok: false, error: 'tx not found on-chain' }
     if (tx.meta?.err) return { ok: false, error: `tx failed on-chain: ${JSON.stringify(tx.meta.err)}` }
-    const programKey = new PublicKey(PROGRAM_ID).toBase58()
-    const msg = tx.transaction.message
-    const accountKeys = 'accountKeys' in msg
-      ? msg.accountKeys.map((k) => k.toBase58())
-      : msg.staticAccountKeys.map((k) => k.toBase58())
-    if (!accountKeys.includes(programKey)) {
-      return { ok: false, error: `tx does not invoke program ${programKey}` }
-    }
+    const keys = (tx.transaction?.message?.accountKeys ?? []) as Array<string | { pubkey: string }>
+    const programInvolved = keys.some((k) => (typeof k === 'string' ? k : k.pubkey) === PROGRAM_ID)
+    if (!programInvolved) return { ok: false, error: `tx does not invoke program ${PROGRAM_ID}` }
     return { ok: true }
   } catch (e) {
     return { ok: false, error: `RPC error: ${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+async function verifyLoanPdaExists(cpfHashHex: string): Promise<boolean> {
+  try {
+    const { PublicKey } = await import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext')
+    const clean = cpfHashHex.startsWith('\\x') ? cpfHashHex.slice(2) : cpfHashHex
+    const cpfHash = new Uint8Array(clean.length / 2)
+    for (let i = 0; i < cpfHash.length; i++) cpfHash[i] = parseInt(clean.substr(i * 2, 2), 16)
+    const [loanPda] = PublicKey.findProgramAddressSync(
+      [new TextEncoder().encode('loan'), cpfHash],
+      new PublicKey(PROGRAM_ID),
+    )
+    const r = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'getAccountInfo',
+        params: [loanPda.toBase58(), { commitment: 'confirmed', encoding: 'base64' }],
+      }),
+    })
+    const data = await r.json() as { result?: { value?: { owner?: string } | null } }
+    const value = data.result?.value
+    if (!value) return false
+    return value.owner === PROGRAM_ID
+  } catch {
+    return false
   }
 }
 
