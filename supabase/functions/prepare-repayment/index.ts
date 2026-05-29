@@ -25,6 +25,14 @@ serve((req) => withAuth(req, async (req, user) => {
   if ((loan as any).loan_requests.user_id !== user.id) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: `Loan status is ${loan.status}, cannot repay` }, 409, req)
 
+  const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
+  const cpfHashBytes = typeof cpfHashRaw === 'string'
+    ? hexToBytes(cpfHashRaw)
+    : cpfHashRaw instanceof Uint8Array ? cpfHashRaw : null
+  if (!cpfHashBytes || cpfHashBytes.length !== 32) {
+    return json({ error: 'cpf_hash missing for loan; loan not disbursed yet, cannot derive repay PDA' }, 409, req)
+  }
+
   const amountBRL = cappedBRL(Number(loan.principal_brl) * (1 + Number(loan.interest_pct)))
   const amountUSDC = brlToUsdc(amountBRL)
 
@@ -35,13 +43,6 @@ serve((req) => withAuth(req, async (req, user) => {
     .eq('kind', 'repay')
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
-
-  const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
-  const cpfHashBytes = typeof cpfHashRaw === 'string'
-    ? hexToBytes(cpfHashRaw)
-    : cpfHashRaw instanceof Uint8Array
-      ? cpfHashRaw
-      : new Uint8Array(32)
 
   const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
   const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
