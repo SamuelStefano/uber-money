@@ -101,12 +101,22 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 
   const { data: loan, error: loanErr } = await admin
     .from('loans')
-    .select('id, status, principal_brl, request_id, loan_requests!inner(user_id)')
+    .select('id, status, principal_brl, request_id, on_chain_pda, loan_requests!inner(user_id)')
     .eq('id', body.loanId)
     .maybeSingle()
   if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
   if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: 'Loan not open' }, 400, req)
+
+  // Anti double-spend: empréstimo desembolsado on-chain tem o USDC na wallet do
+  // motorista. O único caminho legítimo pro Pix é usdc-to-pix (exige cash_out
+  // devolvendo o USDC pro vault antes). O Pix legacy aqui pagaria sem o swap-back.
+  if (loan.on_chain_pda) {
+    return json({ error: 'Loan disbursed on-chain; cash out via on-chain swap-back, not legacy Pix' }, 409, req)
+  }
+  const { data: cashout } = await admin.from('cashout_intents')
+    .select('id').eq('loan_id', body.loanId).neq('status', 'failed').limit(1)
+  if (cashout?.length) return json({ error: 'Loan already cashed out on-chain' }, 409, req)
 
   if (body.pixKeyType === 'cpf') {
     const { data: cnhDoc } = await admin
