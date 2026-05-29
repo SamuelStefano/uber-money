@@ -4,18 +4,25 @@ import type { ActivityItem } from '@/types/domain'
 
 interface ActivityRowProps {
   item: ActivityItem
+  onClick?: () => void
 }
 
-export function ActivityRow({ item }: ActivityRowProps) {
+export function ActivityRow({ item, onClick }: ActivityRowProps) {
   const isPix = item.kind === 'pix'
   const sign = isPix ? '+' : '−'
   const tint = isPix ? 'var(--accent-deep)' : 'var(--ink)'
+  const clickable = !!onClick
   return (
-    <div style={{
-      background: '#fff', borderRadius: 18, padding: '16px 20px',
-      display: 'flex', alignItems: 'center', gap: 16,
-      boxShadow: 'inset 0 0 0 1px var(--line-2)',
-    }}>
+    <div
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      style={{
+        background: '#fff', borderRadius: 18, padding: '16px 20px',
+        display: 'flex', alignItems: 'center', gap: 16,
+        boxShadow: 'inset 0 0 0 1px var(--line-2)',
+        cursor: clickable ? 'pointer' : 'default',
+      }}
+    >
       <div style={{
         width: 44, height: 44, borderRadius: 12,
         background: isPix ? 'var(--accent-soft)' : '#F4F4F5',

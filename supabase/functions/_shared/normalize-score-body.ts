@@ -1,6 +1,8 @@
 import { admin } from './admin.ts'
 import { FINALIDADES, type FinalidadeId, type ScoreInputs } from './score-rules.ts'
 
+const OCR_INCOME_FLOOR = Number(Deno.env.get('OCR_INCOME_FLOOR') ?? '1000')
+
 const REASON_TO_FINALIDADE: Record<string, FinalidadeId> = {
   pneu: 'pneu',
   suspensao: 'suspensao',
@@ -30,8 +32,13 @@ export async function normalizeScoreBody(
     const { data: earnings } = await admin
       .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'print_earnings').maybeSingle()
     const income = Number((earnings?.ocr_data as { gross_monthly_income?: number } | null)?.gross_monthly_income)
-    if (Number.isFinite(income) && income > 0) faturamento_mensal_brl = income
-    else faturamento_mensal_brl = Number(Deno.env.get('OCR_LENIENT_INCOME') ?? '6500')
+    if (Number.isFinite(income) && income >= OCR_INCOME_FLOOR) {
+      faturamento_mensal_brl = income
+    } else {
+      const fallback = Number(Deno.env.get('OCR_LENIENT_INCOME') ?? '6500')
+      console.warn('[normalize-score-body] OCR income below floor, using fallback', { userId, ocr_income: income, floor: OCR_INCOME_FLOOR, fallback })
+      faturamento_mensal_brl = fallback
+    }
   }
 
   const inputs: ScoreInputs = {

@@ -57,6 +57,8 @@ export interface ActivityItem {
   label: string
   sub: string
   timestamp: string
+  receipt?: PayoutReceipt
+  decision?: LoanDecision
 }
 
 export type RepayPhase =

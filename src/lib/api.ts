@@ -1,5 +1,3 @@
-// api.ts — cliente real do backend (Supabase Edge Functions).
-// Em dev sem env: usa mocks de lib/mock.ts. Em prod: hits reais com JWT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
 import type { LoanRequestPayload, ScoreResult, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
@@ -60,7 +58,6 @@ export async function verifyWallet(wallet: string, nonce: string, signatureB58: 
   const data = await r.json()
   if (data.access_token) {
     setWalletAccessToken(data.access_token)
-    // Best-effort setSession (Supabase JS pode rejeitar — não bloqueante)
     try {
       await supabase().auth.setSession({ access_token: data.access_token, refresh_token: '' })
     } catch (_) { /* ignore — usamos _walletAccessToken como fonte da verdade */ }
@@ -109,7 +106,6 @@ export async function getCreditStatus(): Promise<CreditStatus> {
   return r.json()
 }
 
-// DR-001 D3: mapeia IDs do front (pneu/suspensao/...) pro enum loan_reason do backend.
 const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {
   pneu: 'vehicle_repair',
   suspensao: 'vehicle_repair',
@@ -212,15 +208,12 @@ interface ReleaseResponse {
   score?: number
 }
 
-// Step 1 (DR-002 D5): admin assina Anchor `release_loan`, USDC cai na wallet Solana do borrower.
 export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
   const r = await authedFetch('request-payout', { action: 'release', loanId })
   if (!r.ok) throw new Error(`release-loan: ${r.status} ${await r.text()}`)
   return r.json()
 }
 
-// DR-004 F+: oracle assina Ed25519 attestation off-chain. Front leva no payload da tx
-// que motorista assina via Phantom. Programa valida assinatura on-chain.
 export interface ScoreAttestation {
   requestId: string
   cpfHashHex: string
@@ -235,7 +228,6 @@ export interface ScoreAttestation {
   borrowerWallet: string
 }
 
-// Step 2 (DR-002 D5): off-ramp Woovi (PROD ou MOCK conforme env).
 export async function requestPayout(loanId: string, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutResponse> {
   const r = await authedFetch('request-payout', { action: 'payout', loanId, pixKey, pixKeyType })
   if (!r.ok) throw new Error(`request-payout: ${r.status} ${await r.text()}`)
@@ -268,8 +260,32 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
     sb.from('loans').select('id, principal_brl, interest_pct, due_date, status, created_at, request_id').order('created_at', { ascending: false }).limit(20),
     sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'release').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
   ])
+  const loanMap = new Map<string, LoanRow>()
+  for (const l of (loans as LoanRow[] | null) ?? []) loanMap.set(l.id, l)
+
   const items: ActivityItem[] = []
+  const loanIdsWithPix = new Set<string>()
   for (const p of (payouts as PayoutRow[] | null) ?? []) {
+    const loan = loanMap.get(p.loan_id)
+    const receipt: PayoutReceipt = {
+      id: p.id,
+      amountBRL: Number(p.amount_brl),
+      to: p.pix_key,
+      timestamp: p.created_at,
+    }
+    const decision: LoanDecision | undefined = loan
+      ? {
+          approved: true,
+          score: 0,
+          loanId: loan.id,
+          requestId: loan.request_id,
+          approvedAmountBRL: Number(loan.principal_brl),
+          interestPct: Number(loan.interest_pct) * 100,
+          installments: 3,
+          dueDate: loan.due_date,
+          loanStatus: loan.status as LoanDecision['loanStatus'],
+        }
+      : undefined
     items.push({
       id: p.id,
       kind: 'pix',
@@ -277,9 +293,13 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
       label: 'Pix recebido',
       sub: `Empréstimo ${p.loan_id.slice(0, 8)} · ${p.pix_key}`,
       timestamp: p.created_at,
+      receipt,
+      decision,
     })
+    loanIdsWithPix.add(p.loan_id)
   }
   for (const l of (loans as LoanRow[] | null) ?? []) {
+    if (loanIdsWithPix.has(l.id)) continue
     items.push({
       id: l.id,
       kind: 'loan',
