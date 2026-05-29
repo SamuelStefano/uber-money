@@ -5,11 +5,11 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
 import { sha256Concat, bufToHex, hexToBuf } from '../_shared/crypto.ts'
+import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 
 const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
 const WOOVI_BASE = Deno.env.get('WOOVI_API_URL') ?? 'https://api.openpix.com.br/api/v1'
 const WOOVI_MODE = (Deno.env.get('WOOVI_MODE') ?? 'mock').toLowerCase()
-const MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10')
 
 type ReleaseBody = { action: 'release'; loanId: string }
 type PayoutBody  = { action: 'payout';  loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
@@ -58,7 +58,7 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
   const cpfHash = await sha256Concat(new TextEncoder().encode(cpfRaw), pepper)
   const cpfHashHex = '\\x' + bufToHex(cpfHash)
 
-  const amountUSDC = BigInt(Math.round(Math.min(Number(loan.principal_brl), MAX_BRL) * 1e6 / 5))
+  const amountUSDC = brlToUsdc(Number(loan.principal_brl))
   const score = Number((loan as any).loan_requests.score ?? 0)
 
   await admin.from('loans').update({ cpf_hash: cpfHashHex }).eq('id', loan.id)
@@ -127,7 +127,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     }
   }
 
-  const amountBRL = Math.min(Number(loan.principal_brl), MAX_BRL)
+  const amountBRL = cappedBRL(Number(loan.principal_brl))
   const amountCents = Math.round(amountBRL * 100)
 
   const { data: existing } = await admin

@@ -1,3 +1,5 @@
+import { CREDIT_LIMIT_MAX_BRL } from './limits.ts'
+
 export type Resposta = 'boa' | 'media' | 'ruim'
 
 export type FinalidadeId =
@@ -62,7 +64,6 @@ export const FINALIDADES: Record<FinalidadeId, FinalidadeSpec> = {
   outro: { id: 'outro', label: 'Outro', min_brl: 30, max_brl: 10000 },
 }
 
-const PAYOUT_MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10000')
 const BASE_INTEREST = 0.025
 const MAX_INTEREST = 0.049
 const POINTS_PER: Record<Resposta, number> = { boa: 3, media: 2, ruim: 1 }
@@ -156,7 +157,7 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
   const score = Math.round((points / MAX_POINTS) * 1000)
 
   const baseRatio = inputs.negativacao === 'nao' ? 0.10 : 0.05
-  const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, PAYOUT_MAX_BRL)
+  const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, CREDIT_LIMIT_MAX_BRL)
 
   const DEMO_RELAX_LIMIT = (Deno.env.get('DEMO_RELAX_LIMIT') ?? 'true').toLowerCase() === 'true'
   if (inputs.amount_brl > limit_brl && !DEMO_RELAX_LIMIT) {

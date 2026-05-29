@@ -5,9 +5,8 @@ import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { connection, deriveVaultPda, PublicKey } from '../_shared/anchor-signer.ts'
+import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 
-const MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10')
-const BRL_PER_USDC = 5
 const PROGRAM_ID = new PublicKey(Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N')
 const VAULT_TOKEN_SEED = new TextEncoder().encode('vault_token')
 
@@ -78,8 +77,8 @@ serve((req) => withAuth(req, async (req, user) => {
     }
   }
 
-  const amountBRL = Math.min(Number(loan.principal_brl), MAX_BRL)
-  const amountUSDC = BigInt(Math.round(amountBRL * 1e6 / BRL_PER_USDC))
+  const amountBRL = cappedBRL(Number(loan.principal_brl))
+  const amountUSDC = brlToUsdc(Number(loan.principal_brl))
 
   const { data: userRow } = await admin.from('users').select('wallet').eq('id', user.id).maybeSingle()
   if (!userRow?.wallet) return json({ error: 'User wallet not registered' }, 400, req)
