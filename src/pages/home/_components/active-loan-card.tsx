@@ -34,7 +34,7 @@ export function ActiveLoanCard({ principalBRL, interestPct, dueDate, status, onR
       </div>
 
       <div style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 500, marginBottom: 24 }}>
-        {(interestPct * 100).toFixed(1)}%/mês · vence {dateBR(dueDate)}
+        {interestPct.toFixed(1)}%/mês · vence {dateBR(dueDate)}
       </div>
 
       <Button variant="primary" full onClick={onRepay}>

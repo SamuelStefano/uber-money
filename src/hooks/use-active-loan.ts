@@ -4,6 +4,7 @@ import type { LoanDecision } from '@/types/domain'
 
 interface ActiveLoanRow {
   id: string
+  request_id: string | null
   principal_brl: number
   interest_pct: number
   due_date: string
@@ -29,7 +30,7 @@ export function useActiveLoan(): UseActiveLoanResult {
     const sb = supabase()
     const { data } = await sb
       .from('loans')
-      .select('id, principal_brl, interest_pct, due_date, status')
+      .select('id, request_id, principal_brl, interest_pct, due_date, status')
       .in('status', ['open', 'late'])
       .order('created_at', { ascending: false })
       .limit(1)
@@ -46,10 +47,10 @@ export function useActiveLoan(): UseActiveLoanResult {
         score: 0,
         approvedAmountBRL: loan.principal_brl,
         installments: 1,
-        interestPct: loan.interest_pct,
+        interestPct: Number(loan.interest_pct) * 100,
         dueDate: loan.due_date,
         loanId: loan.id,
-        requestId: '',
+        requestId: loan.request_id ?? '',
         loanStatus: loan.status as 'open' | 'late',
       }
     : null

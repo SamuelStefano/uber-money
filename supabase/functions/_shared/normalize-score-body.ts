@@ -35,7 +35,9 @@ export async function normalizeScoreBody(
     if (Number.isFinite(income) && income >= OCR_INCOME_FLOOR) {
       faturamento_mensal_brl = income
     } else {
-      faturamento_mensal_brl = Number(Deno.env.get('OCR_LENIENT_INCOME') ?? '6500')
+      const fallback = Number(Deno.env.get('OCR_LENIENT_INCOME') ?? '6500')
+      console.warn('[normalize-score-body] OCR income below floor, using fallback', { userId, ocr_income: income, floor: OCR_INCOME_FLOOR, fallback })
+      faturamento_mensal_brl = fallback
     }
   }
 
