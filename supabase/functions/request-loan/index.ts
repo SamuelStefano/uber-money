@@ -68,6 +68,7 @@ serve((req) => withAuth(req, async (req, user) => {
     .select('id, amount_brl, score, limit_brl, interest_pct, created_at')
     .eq('user_id', user.id)
     .eq('status', 'approved')
+    .eq('amount_brl', inputs.amount_brl)
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(1)

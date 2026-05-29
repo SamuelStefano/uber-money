@@ -4,15 +4,19 @@ import { PageHeading } from '@/components/atoms/page-heading'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
+import { useActiveLoan } from '@/hooks/use-active-loan'
+import { Store } from '@/store'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
 import { RequestCreditCta } from './_components/request-credit-cta'
 import { ScoreCard } from './_components/score-card'
 import { LimitCard } from './_components/limit-card'
 import { HomeBackdrop } from './_components/home-backdrop'
+import { ActiveLoanCard } from './_components/active-loan-card'
 
 interface HomeScreenProps {
   onRequestCredit: () => void
+  onRepay: () => void
 }
 
 const container = { animate: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }
@@ -21,11 +25,21 @@ const item = {
   animate: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.32, 0.72, 0, 1] } },
 }
 
-export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
+export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
   const [s] = useStore()
   const balance = useCountUp(s.wallet.balanceBRL, { duration: 1300, initialValue: 0 })
   const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
   const { credit } = useCreditStatus()
+  const { loan, decision } = useActiveLoan()
+
+  const hasActiveLoan = loan !== null && (loan.status === 'open' || loan.status === 'late')
+
+  const handleRepay = () => {
+    if (decision) {
+      Store.set({ lastDecision: decision })
+    }
+    onRepay()
+  }
 
   const scoreCaption = credit.has_request
     ? 'Calculado a partir dos seus ganhos do Uber'
@@ -56,7 +70,17 @@ export function HomeScreen({ onRequestCredit }: HomeScreenProps) {
           </motion.div>
 
           <motion.div variants={item}>
-            <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
+            {hasActiveLoan && loan ? (
+              <ActiveLoanCard
+                principalBRL={loan.principal_brl}
+                interestPct={loan.interest_pct}
+                dueDate={loan.due_date}
+                status={loan.status as 'open' | 'late'}
+                onRepay={handleRepay}
+              />
+            ) : (
+              <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
+            )}
           </motion.div>
 
           <motion.div variants={item}>

@@ -268,8 +268,31 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
     sb.from('loans').select('id, principal_brl, interest_pct, due_date, status, created_at, request_id').order('created_at', { ascending: false }).limit(20),
     sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'release').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
   ])
+  const loanMap = new Map<string, LoanRow>()
+  for (const l of (loans as LoanRow[] | null) ?? []) loanMap.set(l.id, l)
+
   const items: ActivityItem[] = []
   for (const p of (payouts as PayoutRow[] | null) ?? []) {
+    const loan = loanMap.get(p.loan_id)
+    const receipt: PayoutReceipt = {
+      id: p.id,
+      amountBRL: Number(p.amount_brl),
+      to: p.pix_key,
+      timestamp: p.created_at,
+    }
+    const decision: LoanDecision | undefined = loan
+      ? {
+          approved: true,
+          score: 0,
+          loanId: loan.id,
+          requestId: loan.request_id,
+          approvedAmountBRL: Number(loan.principal_brl),
+          interestPct: Number(loan.interest_pct) * 100,
+          installments: 3,
+          dueDate: loan.due_date,
+          loanStatus: loan.status as LoanDecision['loanStatus'],
+        }
+      : undefined
     items.push({
       id: p.id,
       kind: 'pix',
@@ -277,6 +300,8 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
       label: 'Pix recebido',
       sub: `Empréstimo ${p.loan_id.slice(0, 8)} · ${p.pix_key}`,
       timestamp: p.created_at,
+      receipt,
+      decision,
     })
   }
   for (const l of (loans as LoanRow[] | null) ?? []) {

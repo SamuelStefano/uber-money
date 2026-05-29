@@ -1,9 +1,15 @@
+import { useState } from 'react'
 import { ActivityRow } from '@/components/molecules/activity-row'
+import { Sheet } from '@/components/molecules/sheet'
+import { Receipt } from '@/components/molecules/receipt'
 import { useUserHistory } from '@/hooks/use-user-history'
+import type { ActivityItem } from '@/types/domain'
 
 export function ActivityList() {
   const { items, loading, error } = useUserHistory()
   const showEmpty = !loading && items.length === 0
+  const [active, setActive] = useState<ActivityItem | null>(null)
+  const canShow = active?.receipt != null && active?.decision != null
 
   return (
     <div>
@@ -25,9 +31,24 @@ export function ActivityList() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {items.map((a) => <ActivityRow key={a.id} item={a} />)}
+          {items.map((a) => (
+            <ActivityRow
+              key={a.id}
+              item={a}
+              onClick={a.kind === 'pix' && a.receipt && a.decision ? () => setActive(a) : undefined}
+            />
+          ))}
         </div>
       )}
+      <Sheet open={!!canShow} onClose={() => setActive(null)}>
+        {canShow && (
+          <Receipt
+            receipt={active!.receipt!}
+            decision={active!.decision!}
+            onClose={() => setActive(null)}
+          />
+        )}
+      </Sheet>
     </div>
   )
 }

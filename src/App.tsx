@@ -98,7 +98,7 @@ function AppInner() {
             {route === 'upload' && (
               <UploadScreen onDone={(docs) => { Store.set({ documents: docs }); go('home', 1) }} />
             )}
-            {route === 'home' && <HomeScreen onRequestCredit={() => go('request', 1)} />}
+            {route === 'home' && <HomeScreen onRequestCredit={() => go('request', 1)} onRepay={() => go('repay', 1)} />}
             {route === 'request' && (
               <RequestScreen
                 onBack={() => go('home', -1)}
