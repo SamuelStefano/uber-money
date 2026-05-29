@@ -69,7 +69,7 @@ export function useRepayScreen({
         setRepayInfo(toRepayInfo(resp))
         if (resp.status === 'confirmed' && resp.attestation) {
           setPhase('pix_confirmed')
-        } else if (resp.status === 'pending') {
+        } else {
           setPhase('pix_pending')
           startPolling()
         }
