@@ -1,12 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useWallet, useConnection } from '@solana/wallet-adapter-react'
-import {
-  PublicKey, Transaction, TransactionInstruction,
-  Ed25519Program, SYSVAR_INSTRUCTIONS_PUBKEY,
-} from '@solana/web3.js'
-import type { Connection } from '@solana/web3.js'
 import { prepareRepayment, confirmRepayment, HAS_BACKEND } from '@/lib/api'
-import { PROGRAM_ID } from '@/lib/solana-tx-builder'
+import { buildRepayLoanTx } from '@/lib/solana-tx-builder'
 import type { LoanDecision, RepayPhase } from '@/types/domain'
 import type { PrepareRepaymentResponse, RepayAttestationPayload } from '@/types/api'
 
@@ -30,74 +25,6 @@ export interface UseRepayScreenOutput {
   sign: () => Promise<void>
   retry: () => void
   onHome: () => void
-}
-
-function u64LE(n: bigint): Uint8Array {
-  const buf = new Uint8Array(8)
-  new DataView(buf.buffer).setBigUint64(0, n, true)
-  return buf
-}
-
-function i64LE(n: bigint): Uint8Array {
-  const buf = new Uint8Array(8)
-  new DataView(buf.buffer).setBigInt64(0, n, true)
-  return buf
-}
-
-async function repayDiscriminator(): Promise<Uint8Array> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('global:repay_loan'))
-  return new Uint8Array(buf).slice(0, 8)
-}
-
-async function buildRepayTx({
-  connection,
-  attestation,
-  borrowerWallet,
-}: {
-  connection: Connection
-  attestation: RepayAttestationPayload
-  borrowerWallet: PublicKey
-}): Promise<Transaction> {
-  const signature = Uint8Array.from(Buffer.from(attestation.signatureHex, 'hex'))
-  const message = Uint8Array.from(Buffer.from(attestation.messageHex, 'hex'))
-  const oraclePubkey = new PublicKey(attestation.oraclePubkeyBase58).toBytes()
-  const loanPda = new PublicKey(attestation.loanPdaBase58)
-
-  const nonce = Uint8Array.from(Buffer.from(attestation.nonceHex, 'hex'))
-  const amountPaidUsdc = BigInt(attestation.amountPaidUsdc)
-  const expiresAt = BigInt(attestation.expiresAt)
-
-  const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
-    publicKey: oraclePubkey,
-    message,
-    signature,
-  })
-
-  const disc = await repayDiscriminator()
-  const cpfHashBytes = message.slice(8, 40)
-  const data = new Uint8Array(disc.length + 32 + 8 + 8 + 8)
-  let offset = 0
-  data.set(disc, offset); offset += 8
-  data.set(cpfHashBytes, offset); offset += 32
-  data.set(u64LE(amountPaidUsdc), offset); offset += 8
-  data.set(nonce, offset); offset += 8
-  data.set(i64LE(expiresAt), offset)
-
-  const repayIx = new TransactionInstruction({
-    programId: PROGRAM_ID,
-    keys: [
-      { pubkey: borrowerWallet, isSigner: true, isWritable: true },
-      { pubkey: loanPda, isSigner: false, isWritable: true },
-      { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
-    ],
-    data,
-  })
-
-  const tx = new Transaction().add(ed25519Ix).add(repayIx)
-  tx.feePayer = borrowerWallet
-  const { blockhash } = await connection.getLatestBlockhash()
-  tx.recentBlockhash = blockhash
-  return tx
 }
 
 function errMsg(e: unknown): string {
@@ -202,7 +129,7 @@ export function useRepayScreen({
     setPhase('signing')
     setErrorMsg(null)
     try {
-      const tx = await buildRepayTx({
+      const tx = await buildRepayLoanTx({
         connection,
         attestation: repayInfo.attestation,
         borrowerWallet: publicKey,

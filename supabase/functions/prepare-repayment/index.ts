@@ -3,18 +3,10 @@ import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
+import { hexToBytes } from '../_shared/bytes.ts'
 
 const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 const BRL_PER_USDC = 5
-
-function bufferFromHex(hex: string): Uint8Array {
-  const clean = hex.startsWith('\\x') ? hex.slice(2) : hex.replace(/^0x/, '')
-  const buf = new Uint8Array(clean.length / 2)
-  for (let i = 0; i < buf.length; i++) {
-    buf[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16)
-  }
-  return buf
-}
 
 serve((req) => withAuth(req, async (req, user) => {
   let body: { loanId?: unknown }
@@ -38,7 +30,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: existing } = await admin
     .from('payouts')
-    .select('id, woovi_correlation_id, woovi_payload, status, attestation_payload, loan_pda_address')
+    .select('id, woovi_correlation_id, woovi_payload, status, attestation_payload')
     .eq('loan_id', loanId)
     .eq('kind', 'repay')
     .in('status', ['pending', 'confirmed'])
@@ -53,7 +45,7 @@ serve((req) => withAuth(req, async (req, user) => {
       qrCodeImage: (woovi.qrCodeImage as string) ?? '',
       amountBRL,
       amountUSDC: amountUSDC.toString(),
-      loanPda: existing.loan_pda_address ?? (loan as any).on_chain_pda ?? '',
+      loanPda: (loan as any).on_chain_pda ?? '',
       status: existing.status,
       mode: WOOVI_MODE,
       expiresAt: (woovi.expiresAt as string) ?? null,
@@ -63,7 +55,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
   const cpfHashBytes = typeof cpfHashRaw === 'string'
-    ? bufferFromHex(cpfHashRaw)
+    ? hexToBytes(cpfHashRaw)
     : cpfHashRaw instanceof Uint8Array
       ? cpfHashRaw
       : new Uint8Array(32)
@@ -117,7 +109,6 @@ serve((req) => withAuth(req, async (req, user) => {
         expiresAt: charge.expiresAt,
         raw: charge.raw,
       },
-      loan_pda_address: loanPda,
     })
     .select('id')
     .single()

@@ -27,3 +27,23 @@ export function bufToBase58(buf: Uint8Array): string {
   for (const b of buf) { if (b === 0) out = '1' + out; else break }
   return out
 }
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+export function base58Decode(s: string): Uint8Array {
+  if (s.length === 0) return new Uint8Array(0)
+  const bytes = [0]
+  for (const c of s) {
+    const v = BASE58_ALPHABET.indexOf(c)
+    if (v < 0) throw new Error('Invalid base58 char: ' + c)
+    let carry = v
+    for (let i = 0; i < bytes.length; i++) {
+      carry += bytes[i] * 58
+      bytes[i] = carry & 0xff
+      carry >>= 8
+    }
+    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8 }
+  }
+  for (const c of s) { if (c !== '1') break; bytes.push(0) }
+  return new Uint8Array(bytes.reverse())
+}

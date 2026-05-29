@@ -14,6 +14,7 @@ import {
   Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction,
   Ed25519Program, SYSVAR_INSTRUCTIONS_PUBKEY,
 } from '@solana/web3.js'
+import type { RepayAttestationPayload } from '@/types/api'
 import {
   TOKEN_PROGRAM_ID, getAssociatedTokenAddress,
   createAssociatedTokenAccountIdempotentInstruction,
@@ -148,6 +149,58 @@ export async function buildBorrowerRequestLoanTx({
 
   const tx = new Transaction().add(ed25519Ix).add(ataIx).add(borrowerIx)
   tx.feePayer = borrower
+  const { blockhash } = await connection.getLatestBlockhash()
+  tx.recentBlockhash = blockhash
+  return tx
+}
+
+export interface BuildRepayLoanTxArgs {
+  connection: Connection
+  attestation: RepayAttestationPayload
+  borrowerWallet: PublicKey
+}
+
+export async function buildRepayLoanTx({
+  connection,
+  attestation,
+  borrowerWallet,
+}: BuildRepayLoanTxArgs): Promise<Transaction> {
+  const signature = Uint8Array.from(Buffer.from(attestation.signatureHex, 'hex'))
+  const message = Uint8Array.from(Buffer.from(attestation.messageHex, 'hex'))
+  const oraclePubkey = new PublicKey(attestation.oraclePubkeyBase58).toBytes()
+  const loanPda = new PublicKey(attestation.loanPdaBase58)
+  const nonce = Uint8Array.from(Buffer.from(attestation.nonceHex, 'hex'))
+  const amountPaidUsdc = BigInt(attestation.amountPaidUsdc)
+  const expiresAt = BigInt(attestation.expiresAt)
+
+  const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
+    publicKey: oraclePubkey,
+    message,
+    signature,
+  })
+
+  const disc = await methodDiscriminator('repay_loan')
+  const cpfHashBytes = message.slice(8, 40)
+  const data = new Uint8Array(disc.length + 32 + 8 + 8 + 8)
+  let offset = 0
+  data.set(disc, offset); offset += 8
+  data.set(cpfHashBytes, offset); offset += 32
+  data.set(u64LE(amountPaidUsdc), offset); offset += 8
+  data.set(nonce, offset); offset += 8
+  data.set(i64LE(expiresAt), offset)
+
+  const repayIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: borrowerWallet, isSigner: true, isWritable: true },
+      { pubkey: loanPda, isSigner: false, isWritable: true },
+      { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
+    ],
+    data,
+  })
+
+  const tx = new Transaction().add(ed25519Ix).add(repayIx)
+  tx.feePayer = borrowerWallet
   const { blockhash } = await connection.getLatestBlockhash()
   tx.recentBlockhash = blockhash
   return tx

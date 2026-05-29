@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
+import { hexToBytes } from '../_shared/bytes.ts'
 
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
@@ -99,9 +100,7 @@ async function generateAndStoreRepayAttestation(payoutId: string, loanId: string
     .from('users').select('wallet').eq('id', loan.loan_requests.user_id).maybeSingle()
   if (!userRow?.wallet) { console.error('[woovi-webhook] user wallet missing', { loanId }); return }
 
-  const { data: payoutRow } = await admin
-    .from('payouts').select('loan_pda_address').eq('id', payoutId).maybeSingle()
-  const loanPdaBase58 = payoutRow?.loan_pda_address ?? loan.on_chain_pda
+  const loanPdaBase58 = loan.on_chain_pda
   if (!loanPdaBase58) { console.error('[woovi-webhook] loan_pda missing'); return }
 
   const cpfHashHex = typeof loan.loan_requests.cpf_hash === 'string'
@@ -124,9 +123,3 @@ async function generateAndStoreRepayAttestation(payoutId: string, loanId: string
   await admin.from('payouts').update({ attestation_payload: attestation }).eq('id', payoutId)
 }
 
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.replace(/^0x/, '')
-  const out = new Uint8Array(clean.length / 2)
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.slice(i*2, i*2+2), 16)
-  return out
-}

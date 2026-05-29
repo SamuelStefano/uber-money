@@ -2,9 +2,9 @@ import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { Money } from '@/components/atoms/money'
 import { Pill } from '@/components/atoms/pill'
-import { Spinner } from '@/components/atoms/spinner'
 import { QrCodeDisplay } from '@/components/atoms/qr-code-display'
 import { CopyButton } from '@/components/molecules/copy-button'
+import { SpinnerRow } from '@/components/molecules/spinner-row'
 import { TxLink } from '@/components/molecules/tx-link'
 import { dateBR } from '@/utils/format'
 import type { RepayPhase, LoanDecision } from '@/types/domain'
@@ -23,29 +23,6 @@ interface RepayHeroProps {
   sign: () => Promise<void>
   retry: () => void
   onHome: () => void
-}
-
-function SpinnerRow({ label }: { label: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-      <Spinner size={40} />
-      <span style={{ fontSize: 15, color: 'var(--mute)', fontWeight: 500 }}>{label}</span>
-    </div>
-  )
-}
-
-function GhostButton({ onClick, children }: { onClick: () => void; children: string }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        fontSize: 13, color: 'var(--mute)', fontWeight: 500, padding: '6px 12px',
-      }}
-    >
-      {children}
-    </button>
-  )
 }
 
 export function RepayHero({
@@ -72,7 +49,7 @@ export function RepayHero({
           <Button variant="accent" size="lg" onClick={generate} style={{ minWidth: 280 }}>
             Pagar empréstimo
           </Button>
-          <GhostButton onClick={onHome}>Voltar à home</GhostButton>
+          <Button variant="ghost" size="sm" onClick={onHome}>Voltar à home</Button>
         </div>
       )}
 
@@ -93,7 +70,7 @@ export function RepayHero({
             </div>
             <CopyButton value={repayInfo.brcode} label="Código" size="md" />
           </div>
-          <GhostButton onClick={onHome}>Pagar depois</GhostButton>
+          <Button variant="ghost" size="sm" onClick={onHome}>Pagar depois</Button>
         </div>
       )}
 
@@ -107,7 +84,7 @@ export function RepayHero({
           <Button variant="accent" size="lg" onClick={sign} icon={<Icon.Shield size={18} />} style={{ minWidth: 280 }}>
             Liquidar na blockchain
           </Button>
-          <GhostButton onClick={onHome}>Depois</GhostButton>
+          <Button variant="ghost" size="sm" onClick={onHome}>Depois</Button>
         </div>
       )}
 
@@ -136,7 +113,7 @@ export function RepayHero({
           <Button variant="secondary" size="lg" onClick={retry} style={{ minWidth: 280 }}>
             Tentar novamente
           </Button>
-          <GhostButton onClick={onHome}>Voltar à home</GhostButton>
+          <Button variant="ghost" size="sm" onClick={onHome}>Voltar à home</Button>
         </div>
       )}
     </div>

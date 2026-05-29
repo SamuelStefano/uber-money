@@ -2,6 +2,9 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
+import { base58Decode } from '../_shared/crypto.ts'
+import { bytesEqual } from '../_shared/bytes.ts'
+import { anchorDiscriminator } from '../_shared/anchor.ts'
 
 const PROGRAM_ID = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 const RPC_URL = Deno.env.get('SOLANA_RPC_URL') ?? 'https://api.devnet.solana.com'
@@ -85,7 +88,7 @@ serve((req) => withAuth(req, async (req, user) => {
   const matched = instructions.find((ix) => {
     if (ix.programIdIndex !== programIdx) return false
     const bytes = base58Decode(ix.data)
-    return arraysEqual(bytes.slice(0, 8), repayDisc)
+    return bytesEqual(bytes.slice(0, 8), repayDisc)
   })
   if (!matched) return json({ error: 'Tx does not contain repay_loan instruction' }, 400, req)
 
@@ -109,39 +112,6 @@ serve((req) => withAuth(req, async (req, user) => {
   }
   return json(resp, 200, req)
 }))
-
-async function anchorDiscriminator(name: string): Promise<Uint8Array> {
-  const buf = new TextEncoder().encode(`global:${name}`)
-  const hash = await crypto.subtle.digest('SHA-256', buf)
-  return new Uint8Array(hash).slice(0, 8)
-}
-
-function base58Decode(s: string): Uint8Array {
-  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  const BASE = BigInt(58)
-  let n = BigInt(0)
-  for (const ch of s) {
-    const idx = ALPHABET.indexOf(ch)
-    if (idx === -1) throw new Error(`Invalid base58 char: ${ch}`)
-    n = n * BASE + BigInt(idx)
-  }
-  const bytes: number[] = []
-  while (n > BigInt(0)) {
-    bytes.unshift(Number(n & BigInt(0xff)))
-    n >>= BigInt(8)
-  }
-  for (const ch of s) {
-    if (ch !== '1') break
-    bytes.unshift(0)
-  }
-  return new Uint8Array(bytes)
-}
-
-function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
-}
 
 function explorerFor(sig: string): string {
   const cluster = RPC_URL.includes('devnet') ? 'devnet' : RPC_URL.includes('testnet') ? 'testnet' : 'mainnet-beta'

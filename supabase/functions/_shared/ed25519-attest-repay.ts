@@ -1,5 +1,6 @@
 import nacl from 'https://esm.sh/tweetnacl@1.0.3'
 import { bufToHex, bufToBase58 } from './crypto.ts'
+import { u64LE, i64LE } from './bytes.ts'
 
 const ADMIN_KEYPAIR_JSON = Deno.env.get('SOLANA_ADMIN_KEYPAIR_JSON') ?? ''
 const DEFAULT_TTL_SECS = 300
@@ -29,18 +30,6 @@ const DOMAIN = new TextEncoder().encode('REPAY_V1')
 function loadAdminKeypair(): nacl.SignKeyPair {
   if (!ADMIN_KEYPAIR_JSON) throw new Error('SOLANA_ADMIN_KEYPAIR_JSON env missing')
   return nacl.sign.keyPair.fromSecretKey(new Uint8Array(JSON.parse(ADMIN_KEYPAIR_JSON)))
-}
-
-function u64LE(n: bigint): Uint8Array {
-  const b = new Uint8Array(8)
-  new DataView(b.buffer).setBigUint64(0, n, true)
-  return b
-}
-
-function i64LE(n: bigint): Uint8Array {
-  const b = new Uint8Array(8)
-  new DataView(b.buffer).setBigInt64(0, n, true)
-  return b
 }
 
 export async function buildRepayAttestation(
