@@ -14,6 +14,16 @@ export interface WalletInfo {
 
 import type { ScoreAttestation } from '@/lib/api'
 
+export interface ScoreBreakdownDecision {
+  tempo_uber: 'boa' | 'media' | 'ruim'
+  dias_semana: 'boa' | 'media' | 'ruim'
+  corridas_semana: 'boa' | 'media' | 'ruim'
+  fonte_renda: 'boa' | 'media' | 'ruim'
+  nota_motorista: 'boa' | 'media' | 'ruim'
+  status_veiculo: 'boa' | 'media' | 'ruim'
+  negativacao: 'boa' | 'media' | 'ruim'
+}
+
 export interface LoanDecision {
   approved: boolean
   score: number
@@ -25,6 +35,7 @@ export interface LoanDecision {
   requestId: string
   attestation?: ScoreAttestation
   limit_brl?: number
+  score_breakdown?: ScoreBreakdownDecision
 }
 
 export interface PayoutReceipt {

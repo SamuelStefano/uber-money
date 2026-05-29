@@ -4,6 +4,7 @@ import { Money } from '@/components/atoms/money'
 import { Pill } from '@/components/atoms/pill'
 import { TxLink } from '@/components/molecules/tx-link'
 import type { LoanDecision } from '@/types/domain'
+import { ScoreBreakdown } from './score-breakdown'
 
 // DR-002 D4: 2-step UX (Q8 TL).
 type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done'
@@ -58,6 +59,18 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
           <span>{decision.interestPct.toFixed(1)}%/mês</span>
         </Pill>
       </div>
+
+      {decision.score_breakdown && (
+        <div style={{
+          marginTop: 16,
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 16,
+          padding: 16,
+        }}>
+          <ScoreBreakdown breakdown={decision.score_breakdown} />
+        </div>
+      )}
 
       {release?.txRelease && (
         <div style={{
