@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { HAS_BACKEND, getUserActivity } from '@/lib/api'
+import { normalizeError } from '@/utils/error'
 import { useStore } from './use-store'
 import type { ActivityItem } from '@/types/domain'
 
@@ -26,7 +27,7 @@ export function useUserHistory(): UseUserHistoryOutput {
       const fetched = await getUserActivity()
       setItems(fetched.length > 0 ? fetched : activity)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(normalizeError(e))
       setItems(activity)
     } finally {
       setLoading(false)
