@@ -12,6 +12,7 @@ export interface RepayAttestationPayload {
   loanPdaBase58: string
   borrowerBase58: string
   amountPaidUsdc: string
+  oraclePubkeyBase58: string
 }
 
 export interface BuildRepayAttestationInput {
@@ -78,5 +79,6 @@ export async function buildRepayAttestation(
     loanPdaBase58: bufToBase58(input.loanPda),
     borrowerBase58: bufToBase58(input.borrower),
     amountPaidUsdc: input.amountPaidUsdc.toString(),
+    oraclePubkeyBase58: bufToBase58(keypair.publicKey),
   }
 }

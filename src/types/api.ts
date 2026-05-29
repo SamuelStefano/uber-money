@@ -45,6 +45,7 @@ export interface RepayAttestationPayload {
   loanPdaBase58: string
   borrowerBase58: string
   amountPaidUsdc: string
+  oraclePubkeyBase58: string
 }
 
 export interface PrepareRepaymentRequest {

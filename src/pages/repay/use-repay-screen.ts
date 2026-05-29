@@ -60,7 +60,7 @@ async function buildRepayTx({
 }): Promise<Transaction> {
   const signature = Uint8Array.from(Buffer.from(attestation.signatureHex, 'hex'))
   const message = Uint8Array.from(Buffer.from(attestation.messageHex, 'hex'))
-  const oraclePubkey = new PublicKey(attestation.borrowerBase58).toBytes()
+  const oraclePubkey = new PublicKey(attestation.oraclePubkeyBase58).toBytes()
   const loanPda = new PublicKey(attestation.loanPdaBase58)
 
   const nonce = Uint8Array.from(Buffer.from(attestation.nonceHex, 'hex'))
@@ -144,7 +144,7 @@ export function useRepayScreen({
           setPhase('pix_confirmed')
         } else if (resp.status === 'pending') {
           setPhase('pix_pending')
-          startPolling(resp.payoutId)
+          startPolling()
         }
       })
       .catch(() => {
@@ -154,9 +154,9 @@ export function useRepayScreen({
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
-  }, [])
+  }, [decision.loanId])
 
-  const startPolling = useCallback((payoutId: string) => {
+  const startPolling = useCallback(() => {
     if (pollingRef.current) clearInterval(pollingRef.current)
     const deadline = Date.now() + 15 * 60 * 1000
     pollingRef.current = setInterval(async () => {
@@ -167,7 +167,7 @@ export function useRepayScreen({
         return
       }
       try {
-        const resp = await prepareRepayment(payoutId)
+        const resp = await prepareRepayment(decision.loanId)
         if (resp.status === 'confirmed' && resp.attestation) {
           setRepayInfo((r) => r ? { ...r, attestation: resp.attestation } : r)
           setPhase('pix_confirmed')
@@ -177,7 +177,7 @@ export function useRepayScreen({
         /* transient error — keep polling */
       }
     }, 3000)
-  }, [])
+  }, [decision.loanId])
 
   const generate = useCallback(async () => {
     setPhase('generating')
@@ -189,13 +189,13 @@ export function useRepayScreen({
         setPhase('pix_confirmed')
       } else {
         setPhase('pix_pending')
-        startPolling(resp.payoutId)
+        startPolling()
       }
     } catch (e) {
       setPhase('error')
       setErrorMsg(errMsg(e))
     }
-  }, [decision, startPolling])
+  }, [decision.loanId, startPolling])
 
   const sign = useCallback(async () => {
     if (!repayInfo?.attestation || !publicKey || !signTransaction || !sendTransaction) return
