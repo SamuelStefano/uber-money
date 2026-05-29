@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react'
 import { Spinner } from './spinner'
 
-type ButtonVariant = 'primary' | 'accent' | 'secondary' | 'ghost'
+type ButtonVariant = 'primary' | 'accent' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'style'> {
@@ -31,6 +31,10 @@ function variantStyle(variant: ButtonVariant, disabled: boolean): CSSProperties 
   if (variant === 'secondary') return {
     background: '#F4F4F5', color: 'var(--ink)',
     boxShadow: 'inset 0 0 0 1px var(--line)',
+  }
+  if (variant === 'danger') return {
+    background: 'rgba(220,60,60,0.06)', color: '#B23A3A',
+    boxShadow: 'inset 0 0 0 1px rgba(220,60,60,0.18)',
   }
   return { background: 'transparent', color: 'var(--ink)' }
 }

@@ -1,15 +1,18 @@
-// woovi-webhook — fail-closed HMAC + handle sha256= prefix + idempotent update.
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonOpen as json, handleOptionsOpen as handleOptions } from '../_shared/cors.ts'
+import { admin } from '../_shared/admin.ts'
+import { hexToBytes } from '../_shared/bytes.ts'
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WEBHOOK_SECRET = Deno.env.get('WOOVI_WEBHOOK_SECRET')
-// ⚠️ Skip HMAC só pra sandbox enquanto não temos o secret no painel.
-// NUNCA ativar em prod — qualquer chamada externa fica aceita.
 const INSECURE_MODE = Deno.env.get('WOOVI_WEBHOOK_INSECURE_MODE') === 'true'
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE)
+const LOCAL_DEV = Deno.env.get('LOCAL_DEV') === 'true'
+const ENVIRONMENT = Deno.env.get('ENVIRONMENT')
+const ALLOWED_INSECURE_ENVS = new Set(['sandbox', 'staging', 'local'])
+
+if (INSECURE_MODE && !LOCAL_DEV && !ALLOWED_INSECURE_ENVS.has(ENVIRONMENT ?? '')) {
+  console.error('[woovi-webhook] INSECURE_MODE bloqueado: ENVIRONMENT fora da whitelist', { ENVIRONMENT })
+  throw new Error('WOOVI_WEBHOOK_INSECURE_MODE=true exige ENVIRONMENT in {sandbox,staging,local} ou LOCAL_DEV=true')
+}
 
 async function verifyHmac(rawBody: string, signature: string, secret: string): Promise<boolean> {
   const sig = signature.startsWith('sha256=') ? signature.slice(7) : signature
@@ -77,8 +80,46 @@ serve(async (req) => {
   if (updErr) return json({ error: updErr.message }, 500)
 
   if (updated && localStatus === 'confirmed' && updated.kind === 'repay') {
-    await admin.from('loans').update({ status: 'paid' }).eq('id', updated.loan_id)
+    // Gera RepayAttestation Ed25519 pra front re-assinar tx Anchor repay_loan.
+    // NÃO marca loans.status='paid' aqui — só confirm-repayment faz isso após tx onchain confirmar.
+    await generateAndStoreRepayAttestation(updated.id, updated.loan_id)
   }
 
   return json({ received: true, correlationId, status: localStatus })
 })
+
+async function generateAndStoreRepayAttestation(payoutId: string, loanId: string): Promise<void> {
+  const { data: loan } = await admin
+    .from('loans')
+    .select('id, principal_brl, interest_pct, on_chain_pda, loan_requests!inner(cpf_hash, user_id)')
+    .eq('id', loanId)
+    .maybeSingle()
+  if (!loan) { console.error('[woovi-webhook] loan not found', { loanId }); return }
+
+  const { data: userRow } = await admin
+    .from('users').select('wallet').eq('id', loan.loan_requests.user_id).maybeSingle()
+  if (!userRow?.wallet) { console.error('[woovi-webhook] user wallet missing', { loanId }); return }
+
+  const loanPdaBase58 = loan.on_chain_pda
+  if (!loanPdaBase58) { console.error('[woovi-webhook] loan_pda missing'); return }
+
+  const cpfHashHex = typeof loan.loan_requests.cpf_hash === 'string'
+    ? loan.loan_requests.cpf_hash.replace(/^\\x/, '')
+    : Array.from(loan.loan_requests.cpf_hash as Uint8Array).map((b) => b.toString(16).padStart(2, '0')).join('')
+  const cpfHash = hexToBytes(cpfHashHex)
+
+  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
+  const loanPda = new PublicKey(loanPdaBase58).toBytes()
+  const borrower = new PublicKey(userRow.wallet).toBytes()
+
+  const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
+  const amountUSDC = BigInt(Math.round(Math.min(amountBRL, 10000) * 1e6 / 5))
+
+  const { buildRepayAttestation } = await import('../_shared/ed25519-attest-repay.ts')
+  const attestation = await buildRepayAttestation({
+    cpfHash, loanPda, borrower, amountPaidUsdc: amountUSDC,
+  })
+
+  await admin.from('payouts').update({ attestation_payload: attestation }).eq('id', payoutId)
+}
+

@@ -80,7 +80,6 @@ async function main() {
   const borrowerAta = await getAssociatedTokenAddress(USDC_DEVNET, borrower.publicKey)
   console.log('Borrower ATA:', borrowerAta.toBase58())
 
-  // Build tx: (1) create borrower ATA + (2) release_loan
   const tx = new Transaction()
   tx.add(createAssociatedTokenAccountInstruction(
     admin.publicKey,        // payer
@@ -125,7 +124,6 @@ async function main() {
   console.log('✓ Confirmada!')
   console.log(`  https://explorer.solana.com/tx/${sig}?cluster=devnet`)
 
-  // Verify outcome
   const borrowerBal = await conn.getTokenAccountBalance(borrowerAta).catch(() => null)
   console.log('\nBorrower USDC :', borrowerBal?.value.uiAmount, 'USDC')
   const vaultBal = await conn.getTokenAccountBalance(vaultState.tokenAccount)

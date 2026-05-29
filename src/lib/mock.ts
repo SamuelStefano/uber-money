@@ -11,21 +11,20 @@ import type { LoanRequestPayload } from '@/types/api'
 
 export async function getWalletMock(): Promise<WalletInfo> {
   await sleep(400, 700)
-  return { balanceBRL: 0, pixKey: MOCK_PIX_KEY }
+  return { balanceBRL: 0, pixKey: null }
 }
 
 export async function requestCreditMock(payload: LoanRequestPayload): Promise<LoanDecision> {
   await sleep(1900, 2400)
-  const base = Math.min(950, 550 + payload.ridesPerWeek * 3 + payload.yearsDriving * 20)
-  const score = Math.round(base + (payload.weeklyEarningsBRL > 1500 ? 80 : 0))
+  const score = 720
   const approved = score >= SCORE_THRESHOLD
-  const interestPct = score >= 800 ? 2.9 : score >= 700 ? 3.9 : 4.9
+  const interestPct = 3.9
   const installments = payload.amountBRL <= 3 ? 1 : payload.amountBRL <= 7 ? 2 : 3
   const due = new Date()
   due.setDate(due.getDate() + 7)
   return {
     approved,
-    score: Math.min(990, score),
+    score,
     approvedAmountBRL: payload.amountBRL,
     installments,
     interestPct,

@@ -2,6 +2,7 @@
 // Em dev sem env: usa mocks de lib/mock.ts. Em prod: hits reais com JWT.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
+import type { LoanRequestPayload, ScoreResult, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -39,7 +40,6 @@ async function authedFetch(path: string, body: unknown): Promise<Response> {
   })
 }
 
-// ─── Wallet auth ────────────────────────────────────────────────
 export async function getNonce(wallet: string): Promise<{ nonce: string; message: string }> {
   const r = await fetch(fnUrl('wallet-auth'), {
     method: 'POST',
@@ -68,23 +68,55 @@ export async function verifyWallet(wallet: string, nonce: string, signatureB58: 
   return data
 }
 
-// ─── Documents (CNH + earnings print) ───────────────────────────
 export type DocKind = 'cnh' | 'print_earnings'
+
+export class NotACnhError extends Error {
+  constructor(public detail: string) { super(detail); this.name = 'NotACnhError' }
+}
 
 export async function processDocument(kind: DocKind, imageBase64: string, mediaType = 'image/jpeg') {
   const r = await authedFetch('process-document', { kind, imageBase64, mediaType })
-  if (!r.ok) throw new Error(`process-document: ${r.status} ${await r.text()}`)
+  if (!r.ok) {
+    const body = await r.text()
+    if (r.status === 422 && body.includes('not_a_cnh')) {
+      try {
+        const parsed = JSON.parse(body) as { message?: string }
+        throw new NotACnhError(parsed.message ?? 'A imagem não é uma CNH.')
+      } catch (e) {
+        if (e instanceof NotACnhError) throw e
+        throw new NotACnhError('A imagem não é uma CNH.')
+      }
+    }
+    throw new Error(`process-document: ${r.status} ${body}`)
+  }
   return r.json() as Promise<{ document_id: string; kind: DocKind; ocr_data: any }>
 }
 
-// ─── Loan flow ──────────────────────────────────────────────────
-// DR-001 D3: mapeia IDs do front (pneu/combustivel/...) pro enum loan_reason do backend.
+export interface CreditStatus {
+  has_request: boolean
+  has_cnh: boolean
+  has_earnings: boolean
+  score: number | null
+  limit_brl: number | null
+  interest_pct: number | null
+  last_request_at?: string
+  last_status?: string
+}
+
+export async function getCreditStatus(): Promise<CreditStatus> {
+  const r = await authedFetch('get-credit-status', {})
+  if (!r.ok) throw new Error(`get-credit-status: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
+// DR-001 D3: mapeia IDs do front (pneu/suspensao/...) pro enum loan_reason do backend.
 const REASON_MAP: Record<string, 'emergency' | 'vehicle_repair' | 'fuel' | 'other'> = {
   pneu: 'vehicle_repair',
-  combustivel: 'fuel',
-  manutencao: 'vehicle_repair',
+  suspensao: 'vehicle_repair',
+  bateria_chupeta: 'vehicle_repair',
+  bateria_troca: 'vehicle_repair',
+  troca_oleo: 'vehicle_repair',
   outro: 'other',
-  emergencia: 'emergency',
 }
 
 interface LoanRequestResponse {
@@ -95,13 +127,25 @@ interface LoanRequestResponse {
   interestPct: number
   installments: number
   dueDate: string | null
-  loanId: string | null
   requestId: string
+  attestation: ScoreAttestation | null
 }
 
-export async function requestLoan(amountBRL: number, reason: string): Promise<LoanDecision> {
-  const mapped = REASON_MAP[reason] ?? 'other'
-  const r = await authedFetch('request-loan', { amountBRL, reason: mapped })
+export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDecision> {
+  const mapped = REASON_MAP[payload.reason] ?? 'other'
+  const body = {
+    amountBRL: payload.amountBRL,
+    reason: mapped,
+    otherText: payload.otherText,
+    tempo_uber_meses: payload.tempo_uber_meses,
+    dias_semana: payload.dias_semana,
+    corridas_semana: payload.corridas_semana,
+    fonte_renda: payload.fonte_renda,
+    nota_motorista: payload.nota_motorista,
+    status_veiculo: payload.status_veiculo,
+    negativacao: payload.negativacao,
+  }
+  const r = await authedFetch('request-loan', body)
   if (!r.ok) throw new Error(`request-loan: ${r.status} ${await r.text()}`)
   const data: LoanRequestResponse = await r.json()
   return {
@@ -111,20 +155,51 @@ export async function requestLoan(amountBRL: number, reason: string): Promise<Lo
     installments: data.installments,
     interestPct: data.interestPct,
     dueDate: data.dueDate ?? new Date().toISOString(),
-    loanId: data.loanId ?? '',
+    loanId: '',
     requestId: data.requestId,
+    attestation: data.attestation ?? undefined,
     limit_brl: data.limit_brl,
   }
+}
+
+export async function scoreCredit(inputs: LoanRequestPayload): Promise<ScoreResult> {
+  const r = await authedFetch('score-credit', {
+    amountBRL: inputs.amountBRL,
+    reason: REASON_MAP[inputs.reason] ?? 'other',
+    otherText: inputs.otherText,
+    tempo_uber_meses: inputs.tempo_uber_meses,
+    dias_semana: inputs.dias_semana,
+    corridas_semana: inputs.corridas_semana,
+    fonte_renda: inputs.fonte_renda,
+    nota_motorista: inputs.nota_motorista,
+    status_veiculo: inputs.status_veiculo,
+    negativacao: inputs.negativacao,
+  })
+  if (!r.ok) throw new Error(`score-credit: ${r.status} ${await r.text()}`)
+  return r.json() as Promise<ScoreResult>
+}
+
+export interface ConfirmLoanResponse {
+  loanId: string
+  status: 'open'
+  txRelease: string
+  explorer: string
+}
+
+export async function confirmLoan(requestId: string, txRelease: string): Promise<ConfirmLoanResponse> {
+  const r = await authedFetch('confirm-loan', { requestId, txRelease })
+  if (!r.ok) throw new Error(`confirm-loan: ${r.status} ${await r.text()}`)
+  return r.json()
 }
 
 export type PixKeyType = 'cpf' | 'email' | 'phone' | 'evp'
 
 interface PayoutResponse {
   payoutId: string
-  status: 'pending'
+  status: 'pending' | 'confirmed'
   correlationId: string
   amountBRL: number
-  mode?: 'prod' | 'mock'
+  mode?: 'prod' | 'mock' | 'sandbox'
 }
 
 interface ReleaseResponse {
@@ -144,6 +219,22 @@ export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
   return r.json()
 }
 
+// DR-004 F+: oracle assina Ed25519 attestation off-chain. Front leva no payload da tx
+// que motorista assina via Phantom. Programa valida assinatura on-chain.
+export interface ScoreAttestation {
+  requestId: string
+  cpfHashHex: string
+  cpfHashBytes: number[]
+  amountUSDC: string
+  score: number
+  expiresAt: string
+  oraclePubkeyBase58: string
+  oraclePubkeyBytes: number[]
+  signature: number[]
+  messageBytes: number[]
+  borrowerWallet: string
+}
+
 // Step 2 (DR-002 D5): off-ramp Woovi (PROD ou MOCK conforme env).
 export async function requestPayout(loanId: string, pixKey: string, pixKeyType: PixKeyType): Promise<PayoutResponse> {
   const r = await authedFetch('request-payout', { action: 'payout', loanId, pixKey, pixKeyType })
@@ -151,7 +242,6 @@ export async function requestPayout(loanId: string, pixKey: string, pixKeyType: 
   return r.json()
 }
 
-// ─── Histórico do user (lido direto via RLS — service_role bypass não usado) ────
 interface LoanRow {
   id: string
   principal_brl: number
@@ -240,7 +330,6 @@ export async function pollUntilConfirmed(payoutId: string, opts: { intervalMs?: 
   throw new Error('Timeout aguardando confirmação do Pix')
 }
 
-// ─── Helpers ────────────────────────────────────────────────────
 export async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()
@@ -248,4 +337,16 @@ export async function fileToBase64(file: File): Promise<string> {
     r.onerror = reject
     r.readAsDataURL(file)
   })
+}
+
+export async function prepareRepayment(loanId: string): Promise<PrepareRepaymentResponse> {
+  const r = await authedFetch('prepare-repayment', { loanId } satisfies PrepareRepaymentRequest)
+  if (!r.ok) throw new Error(`prepare-repayment: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
+export async function confirmRepayment(loanId: string, txRepay: string): Promise<ConfirmRepaymentResponse> {
+  const r = await authedFetch('confirm-repayment', { loanId, txRepay } satisfies ConfirmRepaymentRequest)
+  if (!r.ok) throw new Error(`confirm-repayment: ${r.status} ${await r.text()}`)
+  return r.json()
 }

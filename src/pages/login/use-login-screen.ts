@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import bs58 from 'bs58'
-import { HAS_BACKEND, getNonce, verifyWallet } from '@/lib/api'
+import { HAS_BACKEND, getNonce, verifyWallet, getCreditStatus } from '@/lib/api'
 import { useToast } from '@/components/organisms/toast-provider'
 import { Store } from '@/store'
 import { uid } from '@/utils/uid'
@@ -10,7 +10,7 @@ import { MOCK_USER_NAME } from '@/consts/mock'
 import type { User } from '@/types/domain'
 
 interface UseLoginScreenInput {
-  onLogin: () => void
+  onLogin: (next: 'home' | 'upload') => void
 }
 
 interface UseLoginScreenOutput {
@@ -67,13 +67,27 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
           }
         }
         Store.set({ user })
+        let next: 'home' | 'upload' = 'upload'
+        if (HAS_BACKEND) {
+          try {
+            const credit = await getCreditStatus()
+            console.log('[login] credit-status:', credit)
+            if (credit.has_cnh && credit.has_earnings) next = 'home'
+            console.log('[login] roteando pra', next)
+          } catch (e) { console.warn('[login] credit-status fetch failed, defaulting to upload', e) }
+        }
         setWaiting(false)
-        onLogin()
+        onLogin(next)
       } catch (e) {
         // Dev visibility: detalhes do erro de auth ajudam diagnose sem expor pro user.
+        const msg = e instanceof Error ? e.message : String(e)
         console.error('[login] auth flow failed:', e)
-        signedForPubkeyRef.current = null  // libera retry se falhou
-        toast.push('Falha na autenticação. Tente reconectar.')
+        // User cancelou signMessage → desconectar wallet pra evitar useEffect re-disparar.
+        // Sem disconnect, o ref limpo + signMessage como nova ref a cada render reabre popup.
+        const canceled = /reject|cancel|denied|user/i.test(msg)
+        try { await wallet.disconnect() } catch { /* noop */ }
+        signedForPubkeyRef.current = null
+        if (!canceled) toast.push('Falha na autenticação. Tente reconectar.')
         setWaiting(false)
       }
     }
@@ -84,32 +98,50 @@ export function useLoginScreen({ onLogin }: UseLoginScreenInput): UseLoginScreen
   // (segundo click com Phantom já selecionada = wallet.select no-op = useEffect
   // intermediário nunca dispara). Versão direta funciona em ambos os caminhos.
   const connect = useCallback(async () => {
-    console.log('[onConnect] click recebido')      // A1: confirma callback dispara
+    console.log('[onConnect] click recebido')
     setWaiting(true)
     signedForPubkeyRef.current = null
 
     const phantom = wallet.wallets.find((w) => w.adapter.name === 'Phantom')
-    console.log('[connect] wallets disponíveis:', wallet.wallets.map((w) => w.adapter.name))
-
     if (!phantom) {
       try { setVisible(true) }
       catch { toast.push('Phantom não detectada.'); setWaiting(false) }
       return
     }
 
-    try {
-      // Só seleciona se ainda não está selecionada (evita Bug 3 — no-op silencioso)
-      if (wallet.wallet?.adapter?.name !== 'Phantom') {
-        wallet.select(phantom.adapter.name)
-        // tick pro provider aplicar select e popular wallet.wallet antes de connect()
-        await new Promise((r) => setTimeout(r, 80))
+    // 1. Selecionar Phantom se não estiver — wallet.select dispara um useEffect
+    //    interno do provider que popula wallet.wallet de forma assíncrona.
+    //    Antes da população, wallet.connect() lança WalletNotSelectedError.
+    //    Solução: aguardar até wallet.wallet ficar populado (max 1.2s).
+    if (wallet.wallet?.adapter?.name !== 'Phantom') {
+      wallet.select(phantom.adapter.name)
+      const start = Date.now()
+      while (Date.now() - start < 1200) {
+        if (wallet.wallet?.adapter?.name === 'Phantom') break
+        await new Promise((r) => setTimeout(r, 30))
       }
+    }
+
+    try {
       console.log('[connect] chamando wallet.connect()')
       await wallet.connect()
       // useEffect de auth (signMessage) dispara quando wallet.connected = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[connect] falhou:', e)
+      // WalletNotSelectedError: race — retry uma vez após settle
+      if (/WalletNotSelected/i.test(msg)) {
+        await new Promise((r) => setTimeout(r, 300))
+        try { await wallet.connect(); return } catch (e2) {
+          toast.push('Não consegui conectar. Tente de novo.')
+          setWaiting(false)
+          return
+        }
+      }
+      if (/reject|cancel|denied|user/i.test(msg)) {
+        setWaiting(false)
+        return
+      }
       toast.push(`Conexão falhou: ${msg}`)
       setWaiting(false)
     }

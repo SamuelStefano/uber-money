@@ -1,5 +1,5 @@
 import { Screen } from '@/components/atoms/screen'
-import { Icon } from '@/components/atoms/icon'
+import { SecurityNote } from '@/components/molecules/security-note'
 import { useAnalysisScreen } from './use-analysis-screen'
 import { AnalysisPulse } from './_components/analysis-pulse'
 import { AnalysisStepper } from './_components/analysis-stepper'
@@ -22,8 +22,8 @@ export function AnalysisScreen({ payload, onDone }: AnalysisScreenProps) {
       }}>
         <AnalysisPulse />
         <AnalysisStepper step={step} />
-        <div style={{ marginTop: 64, fontSize: 13, color: 'var(--mute-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icon.Shield /><span>Análise em segundos · seguro</span>
+        <div style={{ marginTop: 64, width: '100%', maxWidth: 320 }}>
+          <SecurityNote>Análise em segundos · seguro</SecurityNote>
         </div>
       </div>
     </Screen>

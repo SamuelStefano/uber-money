@@ -9,7 +9,19 @@ export interface User {
 
 export interface WalletInfo {
   balanceBRL: number
-  pixKey: string
+  pixKey: string | null
+}
+
+import type { ScoreAttestation } from '@/lib/api'
+
+export interface ScoreBreakdownDecision {
+  tempo_uber: 'boa' | 'media' | 'ruim'
+  dias_semana: 'boa' | 'media' | 'ruim'
+  corridas_semana: 'boa' | 'media' | 'ruim'
+  fonte_renda: 'boa' | 'media' | 'ruim'
+  nota_motorista: 'boa' | 'media' | 'ruim'
+  status_veiculo: 'boa' | 'media' | 'ruim'
+  negativacao: 'boa' | 'media' | 'ruim'
 }
 
 export interface LoanDecision {
@@ -20,8 +32,13 @@ export interface LoanDecision {
   interestPct: number
   dueDate: string
   loanId: string
-  requestId?: string
+  requestId: string
+  attestation?: ScoreAttestation
   limit_brl?: number
+  score_breakdown?: ScoreBreakdownDecision
+  txRepay?: string | null
+  repaidAt?: string | null
+  loanStatus?: 'open' | 'paid' | 'late'
 }
 
 export interface PayoutReceipt {
@@ -41,3 +58,13 @@ export interface ActivityItem {
   sub: string
   timestamp: string
 }
+
+export type RepayPhase =
+  | 'idle'
+  | 'generating'
+  | 'pix_pending'
+  | 'pix_confirmed'
+  | 'signing'
+  | 'tx_pending'
+  | 'done'
+  | 'error'

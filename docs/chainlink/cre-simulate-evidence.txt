@@ -1,0 +1,29 @@
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=10kb resp=100kb timeout=10s | ConfHTTP: req=10kb resp=100kb timeout=10s | Consensus obs=25kb | ChainWrite report=5kb gas=5000000 | WASM binary=100mb compressed=20mb
+  Binary hash: 291d8a4bc6be142153d6892d279220ccd9e45b8b57f5e3498eb37fdafffffc2c
+  Config hash: 4cddf851e6c41d428189dce20548cf2c33b11ed30a0845457b1018f83f501fcf
+2026-05-28T17:26:47Z [SIMULATION] Simulator Initialized
+
+2026-05-28T17:26:47Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+2026-05-28T17:26:47Z [USER LOG] CRE workflow triggered (Uber Money score)
+2026-05-28T17:26:47Z [USER LOG] Raw payload: {
+  "wallet": "CQziGuEV4i8yGBHwQQJMpe6tACSMR5jWUWjmYSGVDAhW",
+  "monthlyIncomeBRL": 6500,
+  "requestedAmountBRL": 1
+}
+2026-05-28T17:26:47Z [USER LOG] Score input | wallet=CQziGuEV4i8yGBHwQQJMpe6tACSMR5jWUWjmYSGVDAhW income=R$6500 requested=R$1
+2026-05-28T17:26:47Z [USER LOG] Score decision | {"wallet":"CQziGuEV4i8yGBHwQQJMpe6tACSMR5jWUWjmYSGVDAhW","approved":true,"score":650,"limitBRL":11700,"requestedAmountBRL":1,"interestPctMonthly":3.6,"reason":"approved"}
+2026-05-28T17:26:47Z [USER LOG] Outcome: APPROVED (approved)
+
+✓ Workflow Simulation Result:
+"{\"wallet\":\"CQziGuEV4i8yGBHwQQJMpe6tACSMR5jWUWjmYSGVDAhW\",\"approved\":true,\"score\":650,\"limitBRL\":11700,\"requestedAmountBRL\":1,\"interestPctMonthly\":3.6,\"reason\":\"approved\"}"
+
+2026-05-28T17:26:47Z [SIMULATION] Execution finished signal received
+2026-05-28T17:26:47Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

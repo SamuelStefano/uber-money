@@ -18,7 +18,9 @@ export function AppWalletProvider({ children }: { children: ReactNode }) {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      {/* autoConnect=false → conexão só dispara quando user clica no botão (não no boot) */}
+      {/* autoConnect=false: popup do Phantom só abre quando user clica em
+        Conectar. Com autoConnect=true o Phantom abria popup sozinho no boot
+        e gerava WalletNotSelectedError se o user clicasse milissegundos antes. */}
       <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
