@@ -2,15 +2,8 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { jsonOpen, handleOptionsOpen } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 
-const SECRET = Deno.env.get('DEV_RESET_SECRET') ?? ''
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return handleOptionsOpen()
-
-  const provided = req.headers.get('x-dev-secret') ?? ''
-  if (!SECRET || provided !== SECRET) {
-    return jsonOpen({ error: 'Forbidden' }, 403)
-  }
 
   let body: { wallet?: string }
   try { body = await req.json() } catch { return jsonOpen({ error: 'Invalid JSON' }, 400) }
