@@ -1,6 +1,7 @@
 import { Card } from '@/components/atoms/card'
 import { Money } from '@/components/atoms/money'
 import { Icon } from '@/components/atoms/icon'
+import { Pill } from '@/components/atoms/pill'
 
 interface BalanceCardProps {
   balance: number
@@ -60,22 +61,7 @@ export function BalanceCard({ balance, pixKey }: BalanceCardProps) {
           )}
         </div>
 
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '6px 12px 6px 10px', borderRadius: 999,
-          background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)',
-          fontSize: 11, fontWeight: 600, border: '1px solid rgba(255,255,255,0.08)',
-          letterSpacing: '0.04em',
-        }}>
-          <span style={{ position: 'relative', width: 6, height: 6 }}>
-            <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'var(--accent)' }} />
-            <span style={{
-              position: 'absolute', inset: -3, borderRadius: 999,
-              border: '1px solid var(--accent)', animation: 'pulse-ring 2.2s ease-out infinite',
-            }} />
-          </span>
-          Solana · conectada
-        </div>
+        <Pill tone="onDark" dot pulse size="md">Solana · conectada</Pill>
       </div>
 
       <div style={{

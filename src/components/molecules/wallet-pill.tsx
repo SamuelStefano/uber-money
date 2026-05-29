@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
+import { Pill } from '@/components/atoms/pill'
 import { useToast } from '@/components/organisms/toast-provider'
 import { useOutsideClick } from '@/hooks/use-outside-click'
 import { useSolBalance } from '@/hooks/use-sol-balance'

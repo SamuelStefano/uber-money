@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { validateCpf, formatCpf } from '@/utils/validate-cpf'
 import type { CnhData } from '@/types/documents'
@@ -108,18 +109,15 @@ export function CnhReviewCard({ data, file, analyzing, onReanalyze, onDelete }: 
         >
           {analyzing ? 'Analisando…' : 'Analisar novamente'}
         </button>
-        <button
-          onClick={onDelete}
+        <Button
+          variant="danger"
+          size="md"
           disabled={analyzing}
-          style={{
-            flex: 1, height: 44, borderRadius: 12,
-            background: 'rgba(220,60,60,0.06)', color: '#B23A3A',
-            border: '1px solid rgba(220,60,60,0.18)', cursor: 'pointer',
-            fontSize: 13, fontWeight: 600,
-          }}
+          onClick={onDelete}
+          style={{ flex: 1 }}
         >
           Excluir e reenviar
-        </button>
+        </Button>
       </div>
     </div>
   )

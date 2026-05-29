@@ -1,6 +1,7 @@
 import { Button } from '@/components/atoms/button'
 import { Icon } from '@/components/atoms/icon'
 import { Money } from '@/components/atoms/money'
+import { Pill } from '@/components/atoms/pill'
 import { TxLink } from '@/components/molecules/tx-link'
 import type { LoanDecision } from '@/types/domain'
 
@@ -48,20 +49,14 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
 
       <Money value={decision.approvedAmountBRL} size={120} symbolSize={52} centsSize={44} weight={800} />
 
-      <div style={{
-        marginTop: 22, display: 'inline-flex', alignItems: 'center', gap: 14,
-        fontSize: 14, color: 'var(--mute)', fontWeight: 500,
-        padding: '8px 16px', borderRadius: 999, background: '#fff',
-        boxShadow: 'inset 0 0 0 1px var(--line)',
-      }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--accent)' }} />
-          Score {Math.round(decision.score / 10)}/100
-        </span>
-        <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
-        <span>{decision.installments}× sem complicação</span>
-        <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
-        <span>{decision.interestPct.toFixed(1)}%/mês</span>
+      <div style={{ marginTop: 22 }}>
+        <Pill tone="paper" dot size="md">
+          <span>Score {Math.round(decision.score / 10)}/100</span>
+          <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
+          <span>{decision.installments}× sem complicação</span>
+          <span style={{ width: 1, height: 14, background: 'var(--line)' }} />
+          <span>{decision.interestPct.toFixed(1)}%/mês</span>
+        </Pill>
       </div>
 
       {release?.txRelease && (
