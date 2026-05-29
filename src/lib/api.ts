@@ -125,8 +125,8 @@ interface LoanRequestResponse {
   interestPct: number
   installments: number
   dueDate: string | null
-  loanId: string | null
   requestId: string
+  attestation: ScoreAttestation | null
 }
 
 export async function requestLoan(amountBRL: number, reason: string): Promise<LoanDecision> {
@@ -141,10 +141,24 @@ export async function requestLoan(amountBRL: number, reason: string): Promise<Lo
     installments: data.installments,
     interestPct: data.interestPct,
     dueDate: data.dueDate ?? new Date().toISOString(),
-    loanId: data.loanId ?? '',
+    loanId: '',
     requestId: data.requestId,
+    attestation: data.attestation ?? undefined,
     limit_brl: data.limit_brl,
   }
+}
+
+export interface ConfirmLoanResponse {
+  loanId: string
+  status: 'open'
+  txRelease: string
+  explorer: string
+}
+
+export async function confirmLoan(requestId: string, txRelease: string): Promise<ConfirmLoanResponse> {
+  const r = await authedFetch('confirm-loan', { requestId, txRelease })
+  if (!r.ok) throw new Error(`confirm-loan: ${r.status} ${await r.text()}`)
+  return r.json()
 }
 
 export type PixKeyType = 'cpf' | 'email' | 'phone' | 'evp'
@@ -177,7 +191,7 @@ export async function releaseLoan(loanId: string): Promise<ReleaseResponse> {
 // DR-004 F+: oracle assina Ed25519 attestation off-chain. Front leva no payload da tx
 // que motorista assina via Phantom. Programa valida assinatura on-chain.
 export interface ScoreAttestation {
-  loanId: string
+  requestId: string
   cpfHashHex: string
   cpfHashBytes: number[]
   amountUSDC: string
@@ -188,12 +202,6 @@ export interface ScoreAttestation {
   signature: number[]
   messageBytes: number[]
   borrowerWallet: string
-}
-
-export async function signScore(loanId: string): Promise<ScoreAttestation> {
-  const r = await authedFetch('sign-score', { loanId })
-  if (!r.ok) throw new Error(`sign-score: ${r.status} ${await r.text()}`)
-  return r.json()
 }
 
 // Step 2 (DR-002 D5): off-ramp Woovi (PROD ou MOCK conforme env).

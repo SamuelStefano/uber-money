@@ -12,6 +12,8 @@ export interface WalletInfo {
   pixKey: string | null
 }
 
+import type { ScoreAttestation } from '@/lib/api'
+
 export interface LoanDecision {
   approved: boolean
   score: number
@@ -20,7 +22,8 @@ export interface LoanDecision {
   interestPct: number
   dueDate: string
   loanId: string
-  requestId?: string
+  requestId: string
+  attestation?: ScoreAttestation
   limit_brl?: number
 }
 

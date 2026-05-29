@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, signScore, type PixKeyType } from '@/lib/api'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, type PixKeyType } from '@/lib/api'
 import { buildBorrowerRequestLoanTx } from '@/lib/solana-tx-builder'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
@@ -76,55 +76,56 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
   const efetuar = useCallback(async () => {
     // Guard: F+ on-chain exige wallet conectada. Sem ela, NÃO cai no legacy
     // (que está sendo descontinuado e crasha). Pede reconexão explícita.
-    if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW) {
+    if (HAS_BACKEND && decision.requestId && ONCHAIN_FLOW) {
       if (!wallet.publicKey || !wallet.signTransaction) {
         toast.push('Reconecte sua carteira pra efetuar o empréstimo')
         try { if (!wallet.connected) await wallet.connect() } catch { /* user cancelou */ }
         return
       }
+      if (!decision.attestation) {
+        toast.push('Atestação expirada — pedir crédito de novo')
+        return
+      }
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (Number(decision.attestation.expiresAt) < nowSec) {
+        toast.push('Atestação expirada — pedir crédito de novo')
+        return
+      }
     }
     setPhase('releasing')
     try {
-      if (HAS_BACKEND && decision.loanId && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
-        // F+ on-chain flow
-        console.log('[efetuar] onchain flow — pegando attestation do oracle')
-        const att = await signScore(decision.loanId)
-
-        console.log('[efetuar] montando tx (Ed25519 + ATA + borrower_request_loan)')
+      if (HAS_BACKEND && decision.requestId && decision.attestation && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
+        const att = decision.attestation
         const tx = await buildBorrowerRequestLoanTx({
           connection,
           payload: att,
           borrower: wallet.publicKey,
         })
 
-        // Simulate ANTES de Phantom — captura erro do Anchor com logs reais
-        console.log('[efetuar] simulando tx (size:', tx.serializeMessage().length, 'bytes)')
         const sim = await connection.simulateTransaction(tx, undefined, [wallet.publicKey])
-        console.log('[efetuar] simulate result:', sim.value)
         if (sim.value.err) {
-          console.error('[efetuar] simulate FAIL — logs:', sim.value.logs)
           throw new Error(`Simulate falhou: ${JSON.stringify(sim.value.err)}\nLogs:\n${(sim.value.logs ?? []).join('\n')}`)
         }
 
-        // Phantom só assina — envio via nossa connection (devnet RPC garantido)
-        console.log('[efetuar] Phantom popup — só assinar')
         const signed = await wallet.signTransaction!(tx)
-        console.log('[efetuar] assinada, enviando via connection devnet')
         const sig = await connection.sendRawTransaction(signed.serialize(), {
           skipPreflight: true,
           maxRetries: 3,
         })
-        console.log('[efetuar] tx enviada:', sig, '— aguardando confirmação')
         await connection.confirmTransaction(sig, 'confirmed')
+
+        const confirmed = await confirmLoan(decision.requestId, sig).catch((e) => {
+          console.error('[efetuar] confirm-loan failed (tx confirmou mas DB nao espelhou)', e)
+          return null
+        })
 
         setRelease({
           cpfHashHex: att.cpfHashHex,
           amountUSDC: Number(att.amountUSDC),
           txRelease: sig,
         })
-        console.log('[efetuar] ✓ on-chain confirmed', sig)
+        if (confirmed) decision.loanId = confirmed.loanId
       } else if (HAS_BACKEND && decision.loanId) {
-        // Legacy admin-signed
         const r = await releaseLoan(decision.loanId)
         setRelease({ cpfHashHex: r.cpfHashHex, amountUSDC: r.amountUSDC, txRelease: r.txRelease })
         if (r.status === 'already_released') {
