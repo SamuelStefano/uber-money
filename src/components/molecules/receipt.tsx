@@ -3,7 +3,7 @@ import { Icon } from '@/components/atoms/icon'
 import { Money } from '@/components/atoms/money'
 import { ReceiptRow } from './receipt-row'
 import { dateBR, timeBR } from '@/utils/format'
-import { MOCK_RECEIPT_DESTINATION } from '@/consts/mock'
+import { useStore } from '@/hooks/use-store'
 import type { LoanDecision, PayoutReceipt } from '@/types/domain'
 
 interface ReceiptProps {
@@ -13,6 +13,9 @@ interface ReceiptProps {
 }
 
 export function Receipt({ receipt, decision, onClose }: ReceiptProps) {
+  const [s] = useStore()
+  const cnhName = s.documents?.cnh?.name
+  const destinationName = cnhName ?? s.user?.name ?? 'Motorista'
   return (
     <div style={{ padding: '24px 40px 32px', maxWidth: 520, margin: '0 auto', width: '100%' }}>
       <div style={{ textAlign: 'center', paddingTop: 8 }}>
@@ -34,7 +37,7 @@ export function Receipt({ receipt, decision, onClose }: ReceiptProps) {
 
       <div style={{ marginTop: 24, background: 'var(--canvas)', borderRadius: 20, padding: '4px 20px' }}>
         <ReceiptRow label="Data e hora" value={`${dateBR(receipt.timestamp)} · ${timeBR(receipt.timestamp)}`} />
-        <ReceiptRow label="Destino" value={MOCK_RECEIPT_DESTINATION} sub={`Chave · ${receipt.to}`} />
+        <ReceiptRow label="Destino" value={destinationName} sub={`Chave · ${receipt.to}`} />
         <ReceiptRow label="Instituição pagadora" value="Uber Money · 24·313·102" sub="Pix · sandbox" />
         <ReceiptRow label="ID da transação" value={receipt.id} mono />
         <ReceiptRow
