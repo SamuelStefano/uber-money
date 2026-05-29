@@ -154,6 +154,52 @@ export async function buildBorrowerRequestLoanTx({
   return tx
 }
 
+export interface BuildCashOutTxArgs {
+  connection: Connection
+  borrower: PublicKey
+  cpfHashBytes: number[]
+  amountUSDC: string
+}
+
+// Step 2 (swap-back): motorista devolve o USDC do empréstimo wallet → vault.
+// Mata o double-spend antes do Pix. Layout da tx: 1 ix cash_out (sem Ed25519/Chainlink).
+export async function buildCashOutTx({
+  connection, borrower, cpfHashBytes, amountUSDC,
+}: BuildCashOutTxArgs): Promise<Transaction> {
+  const cpfHash = new Uint8Array(cpfHashBytes)
+  const amount = BigInt(amountUSDC)
+
+  const [vault] = PublicKey.findProgramAddressSync([VAULT_SEED], PROGRAM_ID)
+  const [loanPda] = PublicKey.findProgramAddressSync([LOAN_SEED, cpfHash], PROGRAM_ID)
+  const vaultTokenAccount = await fetchVaultTokenAccount(connection, vault)
+  const borrowerAta = await getAssociatedTokenAddress(USDC_DEVNET, borrower)
+
+  const disc = await methodDiscriminator('cash_out')
+  const data = new Uint8Array(disc.length + 32 + 8)
+  data.set(disc, 0)
+  data.set(cpfHash, 8)
+  data.set(u64LE(amount), 40)
+
+  const ix = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: borrower, isSigner: true, isWritable: true },
+      { pubkey: loanPda, isSigner: false, isWritable: false },
+      { pubkey: borrowerAta, isSigner: false, isWritable: true },
+      { pubkey: vaultTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  })
+
+  const tx = new Transaction().add(ix)
+  tx.feePayer = borrower
+  const { blockhash } = await connection.getLatestBlockhash()
+  tx.recentBlockhash = blockhash
+  return tx
+}
+
 export interface BuildRepayLoanTxArgs {
   connection: Connection
   attestation: RepayAttestationPayload

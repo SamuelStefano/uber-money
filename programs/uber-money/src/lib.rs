@@ -237,6 +237,31 @@ pub mod uber_money {
         });
         Ok(())
     }
+
+    pub fn cash_out(ctx: Context<CashOut>, cpf_hash: [u8; 32], amount: u64) -> Result<()> {
+        require!(amount > 0, UberError::InvalidAmount);
+        require!(amount <= ctx.accounts.loan.amount, UberError::InvalidAmount);
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.borrower_token_account.to_account_info(),
+                    to: ctx.accounts.vault_token_account.to_account_info(),
+                    authority: ctx.accounts.borrower.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        emit!(LoanCashedOut {
+            borrower: ctx.accounts.borrower.key(),
+            cpf_hash,
+            amount,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+        Ok(())
+    }
 }
 
 // https://docs.solanalabs.com/runtime/programs#ed25519-program
@@ -426,6 +451,29 @@ pub struct RepayLoan<'info> {
     pub instructions_sysvar: AccountInfo<'info>,
 }
 
+#[derive(Accounts)]
+#[instruction(cpf_hash: [u8; 32])]
+pub struct CashOut<'info> {
+    pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(
+        seeds = [LOAN_SEED, cpf_hash.as_ref()],
+        bump = loan.bump,
+        has_one = borrower,
+    )]
+    pub loan: Account<'info, Loan>,
+    #[account(
+        mut,
+        token::mint = vault.usdc_mint,
+        token::authority = borrower
+    )]
+    pub borrower_token_account: Account<'info, TokenAccount>,
+    #[account(mut, address = vault.token_account)]
+    pub vault_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+}
+
 #[account]
 pub struct Vault {
     pub authority: Pubkey,
@@ -483,6 +531,14 @@ pub struct LoanRepaid {
     pub loan: Pubkey,
     pub amount_paid_usdc: u64,
     pub repaid_at: i64,
+}
+
+#[event]
+pub struct LoanCashedOut {
+    pub borrower: Pubkey,
+    pub cpf_hash: [u8; 32],
+    pub amount: u64,
+    pub timestamp: i64,
 }
 
 #[error_code]

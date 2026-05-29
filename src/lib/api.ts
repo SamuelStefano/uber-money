@@ -234,6 +234,29 @@ export async function requestPayout(loanId: string, pixKey: string, pixKeyType: 
   return r.json()
 }
 
+export interface CashOutToPixResponse {
+  payoutId: string
+  status: string
+  correlationId: string
+  amountBRL: number
+  amountUSDC: number
+  txCashOut: string
+  explorer: string
+  mode: string
+}
+
+export async function cashOutToPix(args: {
+  loanId: string
+  cashOutTxSig: string
+  pixKey: string
+  pixKeyType: PixKeyType
+  clientIntentId: string
+}): Promise<CashOutToPixResponse> {
+  const r = await authedFetch('usdc-to-pix', args)
+  if (!r.ok) throw new Error(`usdc-to-pix: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
 interface LoanRow {
   id: string
   principal_brl: number
