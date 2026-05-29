@@ -171,14 +171,18 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   if (payoutErr) return json({ error: payoutErr.message }, 500, req)
 
   if (WOOVI_MODE === 'mock') {
-    setTimeout(async () => {
+    // EdgeRuntime mata o isolate ao retornar — sem waitUntil o setTimeout nunca
+    // dispara e o payout fica preso em 'pending'.
+    const confirmLater = new Promise<void>((resolve) => setTimeout(async () => {
       try {
         await admin.from('payouts').update({
           status: 'confirmed',
           woovi_payload: { mocked: true, correlationId, paidAt: new Date().toISOString() },
         }).eq('id', payout.id)
-      } catch (e) { console.error('[mock] update failed', e) }
-    }, 8000)
+      } catch (e) { console.error('[mock] update failed', e) } finally { resolve() }
+    }, 8000))
+    const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+    if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(confirmLater)
     return json({
       payoutId: payout.id, status: 'pending', correlationId, amountBRL,
       mode: 'mock', note: 'Confirmed in ~8s via mock background update.',
