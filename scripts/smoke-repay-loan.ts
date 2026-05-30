@@ -62,7 +62,7 @@ async function main() {
   const amount = 1_000_000n
   const score = 720
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 300)
-  const releaseMessage = Buffer.concat([cpfHash, u64LE(amount), u16LE(score), i64LE(expiresAt)])
+  const releaseMessage = Buffer.concat([Buffer.from('LOAN_V01'), cpfHash, borrower.publicKey.toBuffer(), u64LE(amount), u16LE(score), i64LE(expiresAt)])
   const releaseSig = nacl.sign.detached(releaseMessage, admin.secretKey)
 
   console.log('\n[2] tx 1: borrower_request_loan (libera USDC + cria PDA Active)…')
