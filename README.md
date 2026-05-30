@@ -48,7 +48,7 @@ Motorista (Phantom)
 |---|---|---|
 | **CRE workflow** TS→WASM | ✅ compila + **simulate funcional** | `docs/chainlink/cre-simulate-evidence.txt` (score=650, approved) |
 | **Data Feeds Solana** (SOL/USD) | ✅ **CPI on-chain real** | tx [2Uu56mExh...yWF2](https://explorer.solana.com/tx/2Uu56mExht7tRoaxdy2W41eAx3z9kByJfrF8LiErKDUeRGpZT7G8yWVdGkQaDQ33H3e7mH3R4CxVkMtzNGQ7yWF2?cluster=devnet) (programa invoke `HEvSKof…`) |
-| Ed25519 oracle attestation | ✅ on-chain via sysvar | mesma tx acima |
+| Ed25519 oracle attestation | ✅ on-chain via sysvar + **anti-forja** (`instruction_index == 0xFFFF`) | prova on-chain: `scripts/smoke-repay-forgery.ts` (erro 6013 `InvalidRepayAttestationLayout`) |
 | CCIP cross-chain | 📋 roadmap v2 (sem EVM no MVP) | DR-004 |
 | CRE deploy + verify Sepolia | ⏳ 28/05 | Etherscan link aqui (TODO) |
 | CCIP `ccipSend` Sepolia | ⏳ 28/05 | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
@@ -172,8 +172,8 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 > "Nosso contrato armazena um hash com pepper do CPF — **pseudonimização por design conforme LGPD art.13 §4º**. O CPF real fica exclusivamente no backend. Em produção migramos para identificador opaco sem nenhuma relação matemática com o CPF, eliminando o risco residual de reversão."
 
 ## Trust assumptions (transparência pré-pitch)
-- **Authority é oráculo de score implícito.** Admin assina `release_loan` confiando no score off-chain computado pela edge. Em produção: Ed25519 attestation do CRE com pubkey verificada on-chain.
-- **`borrower: AccountInfo` não-Signer.** Admin escolhe ATA destino vinculado ao JWT verificado. Em produção: borrower vira Signer via Squads multisig ou session key.
+- **Oráculo de score = authority keypair.** A edge computa o score e o **oracle assina uma attestation Ed25519** (`LOAN_V01` borrow / `REPAY_V1` repay) verificada on-chain via sysvar instructions. O contrato amarra pubkey, mensagem e assinatura à mesma instrução (`instruction_index == 0xFFFF`), fechando forja — prova on-chain em `scripts/smoke-repay-forgery.ts`. Em produção: pubkey do CRE no lugar do authority.
+- **Motorista é Signer** (DR-004 F+). O borrower chama `borrower_request_loan`/`repay_loan` direto via Phantom; a attestation amarra o desembolso ao `cpf_hash` + pubkey do motorista.
 - **CCIP último hop mockado** via `admin_disburse`. CRE Sepolia + CCIP `ccipSend` são reais (links no explorer); o callback final é admin-triggered.
 
 ## Status (27/05/2026 — gate EOD batido ✅)
@@ -182,7 +182,7 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ✅ Smoke test on-chain passou (1 USDC transferido pelo programa)
 - ✅ Edge `request-payout` (com Anchor signer server-side raw tx) deployada
 - ✅ Edge `wallet-auth` (fix DR-003: sem `session_id` fake) deployada
-- ✅ Edge `parse-uber-print` stub deployada (Will completa OCR real 28/05)
+- ✅ Edge `process-document` (OCR real via Claude vision) deployada
 - ✅ Migration 0005 aplicada (users.cpf_pepper per-user + loans.cpf_hash UNIQUE)
 - ✅ Front 6 telas atomic design + 2-step UX (`Efetuar` → `Sacar`)
 - ✅ Wallet UX: Phantom only, autoConnect=false, dedupe signMessage
