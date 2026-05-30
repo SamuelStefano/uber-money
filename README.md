@@ -52,7 +52,7 @@ Motorista (Phantom)
 | CCIP cross-chain | 📋 roadmap v2 (sem EVM no MVP) | DR-004 |
 | CRE deploy + verify Sepolia | ⏳ 28/05 | Etherscan link aqui (TODO) |
 | CCIP `ccipSend` Sepolia | ⏳ 28/05 | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
-| Solana receiver | ⚠️ MOCK declarado — instruction `admin_disburse(cpf_hash, amount, score, source_chain_selector)` chamada pelo admin (não pelo CCIP router) por restrição de tempo de hackathon. Assinatura compatível com `Any2SolanaMessage`. | `programs/uber-money/src/lib.rs:104` |
+| Solana receiver (CCIP) | 📋 fora do MVP — Solana-only, sem hop CCIP. Desembolso = motorista chama `borrower_request_loan` direto (Phantom signer). CCIP cross-chain é roadmap v2. | DR-004 |
 
 **Pivot 28/05 (DR-004):** Saímos do MOCK CCIP e fomos pra **Chainlink real on-chain Solana**:
 - CRE workflow simulate funcional (Chainlink sandbox DON)
@@ -61,7 +61,7 @@ Motorista (Phantom)
 - Ed25519 attestation pre-instruction
 - Circuit breaker propositado (não decoração teatral)
 
-**Por que `borrower_request_loan` em vez de `admin_disburse`:** narrativa "microcrédito on-chain Solana" exige motorista chamando contrato direto. CCIP→Solana descartado por requerer EVM/Sepolia (incompatível com escopo Solana-only).
+**Por que `borrower_request_loan` em vez de um receiver CCIP:** narrativa "microcrédito on-chain Solana" exige motorista chamando contrato direto. CCIP→Solana descartado por requerer EVM/Sepolia (incompatível com escopo Solana-only).
 
 **Upgrade path produção:** trocar Ed25519 attestation por CCIP `ccip_receive` real via [solana-starter-kit](https://github.com/smartcontractkit/solana-starter-kit). Assinatura compatível.
 
@@ -85,8 +85,9 @@ Motorista (Phantom)
 Instructions:
 - `initialize_vault()` — one-shot, cria vault PDA `[b"vault"]` + token account
 - **`borrower_request_loan(cpf_hash, amount, score, expires_at)`** — DR-004 F+ atual: motorista é Signer, valida Ed25519 attestation + CPI Chainlink Data Feed, transfere USDC
-- `release_loan(cpf_hash, amount, score)` — admin-signed legacy (feature flag `VITE_ONCHAIN_FLOW=false`)
-- `admin_disburse(...)` — stub histórico
+- `release_loan(cpf_hash, amount, score)` — admin-signed legacy fallback (`has_one = authority`, sem attestation), usado só com `VITE_ONCHAIN_FLOW=false`
+- `repay_loan(cpf_hash, amount, nonce, expires_at)` — motorista assina + Ed25519 `REPAY_V1`, marca PDA Repaid
+- `cash_out(cpf_hash, amount)` — motorista assina swap-back USDC→vault (anti double-spend antes do Pix)
 
 PDA seed: `[b"loan", sha256(cpf || users.cpf_pepper)]` — 1 empréstimo por CPF lifetime. `init` (não `init_if_needed`) → falha hard se já existe.
 
@@ -133,7 +134,11 @@ supabase/
     process-document    # CNH OCR via Claude Vision
     request-loan        # score + cria loan_request
     request-payout      # dispatcher: action='release' (Anchor) | 'payout' (Woovi)
-    parse-uber-print    # stub Will completa 28/05
+    confirm-loan        # espelha tx borrower_request_loan → DB (persiste cpf_hash)
+    prepare-repayment   # cobrança Woovi de repagamento
+    confirm-repayment   # espelha tx repay_loan → DB (amarra ix ao loan PDA/borrower)
+    usdc-to-pix         # valida cash_out on-chain → dispara Pix (anti double-spend)
+    score-credit        # score V5 + assina attestation
     woovi-webhook
     _shared/
       anchor-signer.ts  # raw tx server-side (sem IDL)
@@ -174,7 +179,13 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 ## Trust assumptions (transparência pré-pitch)
 - **Oráculo de score = authority keypair.** A edge computa o score e o **oracle assina uma attestation Ed25519** (`LOAN_V01` borrow / `REPAY_V1` repay) verificada on-chain via sysvar instructions. O contrato amarra pubkey, mensagem e assinatura à mesma instrução (`instruction_index == 0xFFFF`), fechando forja — prova on-chain em `scripts/smoke-repay-forgery.ts`. Em produção: pubkey do CRE no lugar do authority.
 - **Motorista é Signer** (DR-004 F+). O borrower chama `borrower_request_loan`/`repay_loan` direto via Phantom; a attestation amarra o desembolso ao `cpf_hash` + pubkey do motorista.
-- **CCIP último hop mockado** via `admin_disburse`. CRE Sepolia + CCIP `ccipSend` são reais (links no explorer); o callback final é admin-triggered.
+- **Sem CCIP no MVP.** Solana-only: desembolso é on-chain direto via `borrower_request_loan`. CCIP cross-chain fica como roadmap v2 (assinatura compatível com `ccip_receive`).
+- **`release_loan` legacy é admin-only** (`has_one = authority`, sem attestation/Chainlink) — só roda com `VITE_ONCHAIN_FLOW=false`. Mesma raiz de confiança do oráculo (authority == oracle keypair). Em produção: remover ou exigir a mesma attestation.
+
+### Limitações on-chain conhecidas (red-team interno, não-bloqueantes pro MVP)
+- **`repay_nonce` é gravado mas não checado on-chain.** Replay é barrado hoje por `status == Active` + 1-loan-por-CPF (PDA única por `cpf_hash`). Se a v2 permitir múltiplos loans por CPF, o nonce precisa ser enforçado (ou seed da PDA com counter).
+- **`cash_out` não tem estado terminal.** Move USDC do motorista PRA o vault (prejudica o motorista, não o protocolo) e é gateado off-chain por `cashout_intents` (índice único, fail-closed antes de qualquer Pix). v2: flipar `status` p/ `CashedOut`.
+- **Circuit breaker lê feed devnet stale (~$22).** O guard `SOL < $10` está sempre verde; o valor está em provar a CPI real (programa + feed pinados), não em halt de mercado real.
 
 ## Status (27/05/2026 — gate EOD batido ✅)
 - ✅ Anchor program **DEPLOYADO em devnet** (program ID acima)
