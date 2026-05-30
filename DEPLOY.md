@@ -33,8 +33,9 @@ supabase secrets set WOOVI_WEBHOOK_SECRET=<random hex>
 supabase secrets set WALLET_UUID_NAMESPACE=$(uuidgen)
 supabase secrets set PAYOUT_MAX_BRL=10
 
-# Edge Functions
-supabase functions deploy wallet-auth process-document request-loan request-payout woovi-webhook
+# Edge Functions (dev-reset NÃO vai pra prod — gated por ENVIRONMENT, só local)
+supabase functions deploy wallet-auth process-document request-loan request-payout woovi-webhook \
+  confirm-loan confirm-repayment prepare-repayment get-credit-status score-credit usdc-to-pix
 ```
 
 Pegue o webhook URL (`https://<ref>.supabase.co/functions/v1/woovi-webhook`) e cadastre no dashboard da Woovi sandbox.
