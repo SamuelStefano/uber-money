@@ -21,9 +21,6 @@ verify_jwt = false
 [functions.process-document]
 verify_jwt = false
 
-[functions.parse-uber-print]
-verify_jwt = false
-
 [functions.usdc-to-pix]
 verify_jwt = false
 
