@@ -173,6 +173,8 @@ serve((req) => withAuth(req, async (req, user) => {
   await admin.from('cashout_intents').update({ pix_payout_id: payout.id })
     .eq('source', 'uber_money').eq('client_intent_id', body.clientIntentId)
 
+  await admin.from('users').update({ pix_key: body.pixKey, pix_key_type: body.pixKeyType }).eq('id', user.id)
+
   let charge
   try {
     charge = await createCharge({

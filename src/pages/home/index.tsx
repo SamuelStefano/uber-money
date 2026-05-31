@@ -4,7 +4,7 @@ import { PageHeading } from '@/components/atoms/page-heading'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
-import { useActiveLoan } from '@/hooks/use-active-loan'
+import { useHome } from '@/hooks/use-home'
 import { Store } from '@/store'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
@@ -27,10 +27,10 @@ const item = {
 
 export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
   const [s] = useStore()
-  const balance = useCountUp(s.wallet.balanceBRL, { duration: 1300, initialValue: 0 })
-  const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
   const { credit } = useCreditStatus()
-  const { loan, decision } = useActiveLoan()
+  const { loan, decision, balanceBRL, pixKey } = useHome()
+  const balance = useCountUp(balanceBRL, { duration: 1300, initialValue: 0 })
+  const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
 
   const hasActiveLoan = loan !== null && (loan.status === 'open' || loan.status === 'late')
 
@@ -79,7 +79,7 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
                 onRepay={handleRepay}
               />
             ) : (
-              <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
+              <BalanceCard balance={balance} pixKey={pixKey} />
             )}
           </motion.div>
 

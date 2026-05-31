@@ -33,6 +33,9 @@ verify_jwt = false
 [functions.get-credit-status]
 verify_jwt = false
 
+[functions.get-home]
+verify_jwt = false
+
 [functions.score-credit]
 verify_jwt = false
 

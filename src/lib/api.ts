@@ -266,32 +266,44 @@ interface LoanRow {
   due_date: string
   status: string
   created_at: string
-  request_id: string
+  request_id: string | null
 }
 
 interface PayoutRow {
   id: string
   amount_brl: number
-  status: string
+  kind: string
   pix_key: string
   created_at: string
   endtoend_id: string | null
   loan_id: string
 }
 
+export interface HomeState {
+  activeLoan: LoanRow | null
+  loans: LoanRow[]
+  payouts: PayoutRow[]
+  balanceBRL: number
+  pixKey: string | null
+  pixKeyType: PixKeyType | null
+}
+
+export async function getHome(): Promise<HomeState> {
+  const r = await authedFetch('get-home', {})
+  if (!r.ok) throw new Error(`get-home: ${r.status} ${await r.text()}`)
+  return r.json()
+}
+
 export async function getUserActivity(): Promise<ActivityItem[]> {
-  const sb = supabase()
-  const [{ data: loans }, { data: payouts }, { data: repays }] = await Promise.all([
-    sb.from('loans').select('id, principal_brl, interest_pct, due_date, status, created_at, request_id').order('created_at', { ascending: false }).limit(20),
-    sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'release').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
-    sb.from('payouts').select('id, amount_brl, status, pix_key, created_at, endtoend_id, loan_id').eq('kind', 'repay').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(20),
-  ])
+  const { loans, payouts: allPayouts } = await getHome()
+  const payouts = allPayouts.filter((p) => p.kind === 'release')
+  const repays = allPayouts.filter((p) => p.kind === 'repay')
   const loanMap = new Map<string, LoanRow>()
-  for (const l of (loans as LoanRow[] | null) ?? []) loanMap.set(l.id, l)
+  for (const l of loans) loanMap.set(l.id, l)
 
   const items: ActivityItem[] = []
   const loanIdsWithPix = new Set<string>()
-  for (const p of (payouts as PayoutRow[] | null) ?? []) {
+  for (const p of payouts) {
     const loan = loanMap.get(p.loan_id)
     const receipt: PayoutReceipt = {
       id: p.id,
@@ -304,7 +316,7 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
           approved: true,
           score: 0,
           loanId: loan.id,
-          requestId: loan.request_id,
+          requestId: loan.request_id ?? '',
           approvedAmountBRL: Number(loan.principal_brl),
           interestPct: Number(loan.interest_pct) * 100,
           installments: 3,
@@ -324,7 +336,7 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
     })
     loanIdsWithPix.add(p.loan_id)
   }
-  for (const p of (repays as PayoutRow[] | null) ?? []) {
+  for (const p of repays) {
     items.push({
       id: p.id,
       kind: 'repay',
@@ -334,7 +346,7 @@ export async function getUserActivity(): Promise<ActivityItem[]> {
       timestamp: p.created_at,
     })
   }
-  for (const l of (loans as LoanRow[] | null) ?? []) {
+  for (const l of loans) {
     if (loanIdsWithPix.has(l.id)) continue
     items.push({
       id: l.id,
