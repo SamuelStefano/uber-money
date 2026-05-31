@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { HAS_BACKEND, getHome, type HomeState } from '@/lib/api'
+import { normalizeError } from '@/utils/error'
 import type { LoanDecision } from '@/types/domain'
 
 const EMPTY: HomeState = {
@@ -12,19 +13,22 @@ interface UseHomeResult {
   balanceBRL: number
   pixKey: string | null
   loading: boolean
+  error: string | null
   reload: () => Promise<void>
 }
 
 export function useHome(): UseHomeResult {
   const [state, setState] = useState<HomeState>(EMPTY)
   const [loading, setLoading] = useState(HAS_BACKEND)
+  const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     if (!HAS_BACKEND) { setState(EMPTY); setLoading(false); return }
-    setLoading(true)
+    setLoading(true); setError(null)
     try {
       setState(await getHome())
-    } catch {
+    } catch (e) {
+      setError(normalizeError(e))
       setState(EMPTY)
     } finally {
       setLoading(false)
@@ -48,5 +52,5 @@ export function useHome(): UseHomeResult {
       }
     : null
 
-  return { loan, decision, balanceBRL: state.balanceBRL, pixKey: state.pixKey, loading, reload }
+  return { loan, decision, balanceBRL: state.balanceBRL, pixKey: state.pixKey, loading, error, reload }
 }

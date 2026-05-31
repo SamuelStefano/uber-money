@@ -290,10 +290,20 @@ export interface HomeState {
   pixKeyType: PixKeyType | null
 }
 
+let inflightHome: Promise<HomeState> | null = null
+
 export async function getHome(): Promise<HomeState> {
-  const r = await authedFetch('get-home', {})
-  if (!r.ok) throw new Error(`get-home: ${r.status} ${await r.text()}`)
-  return r.json()
+  if (inflightHome) return inflightHome
+  inflightHome = (async () => {
+    const r = await authedFetch('get-home', {})
+    if (!r.ok) throw new Error(`get-home: ${r.status} ${await r.text()}`)
+    return r.json() as Promise<HomeState>
+  })()
+  try {
+    return await inflightHome
+  } finally {
+    inflightHome = null
+  }
 }
 
 export async function getUserActivity(): Promise<ActivityItem[]> {
