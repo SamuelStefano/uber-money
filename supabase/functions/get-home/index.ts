@@ -60,7 +60,7 @@ serve((req) => withAuth(req, async (req, user) => {
     activeLoan,
     loans,
     payouts,
-    balanceBRL: released - repaid,
+    balanceBRL: Math.max(0, released - repaid),
     pixKey: userRow?.pix_key ?? null,
     pixKeyType: userRow?.pix_key_type ?? null,
   }, 200, req)
