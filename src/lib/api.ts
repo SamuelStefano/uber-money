@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ActivityItem, LoanDecision, PayoutReceipt } from '@/types/domain'
+import type { ActivityItem, LoanDecision, PayoutReceipt, ScoreBreakdownDecision } from '@/types/domain'
 import type { LoanRequestPayload, ScoreResult, PrepareRepaymentRequest, PrepareRepaymentResponse, ConfirmRepaymentRequest, ConfirmRepaymentResponse } from '@/types/api'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -125,6 +125,7 @@ interface LoanRequestResponse {
   dueDate: string | null
   requestId: string
   attestation: ScoreAttestation | null
+  score_breakdown?: ScoreBreakdownDecision
 }
 
 export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDecision> {
@@ -155,6 +156,7 @@ export async function requestLoan(payload: LoanRequestPayload): Promise<LoanDeci
     requestId: data.requestId,
     attestation: data.attestation ?? undefined,
     limit_brl: data.limit_brl,
+    score_breakdown: data.score_breakdown,
   }
 }
 

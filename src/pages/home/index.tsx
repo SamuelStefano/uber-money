@@ -73,7 +73,7 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
             {hasActiveLoan && loan ? (
               <ActiveLoanCard
                 principalBRL={loan.principal_brl}
-                interestPct={loan.interest_pct}
+                interestPct={Number(loan.interest_pct) * 100}
                 dueDate={loan.due_date}
                 status={loan.status as 'open' | 'late'}
                 onRepay={handleRepay}

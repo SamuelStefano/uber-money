@@ -92,7 +92,7 @@ serve((req) => withAuth(req, async (req, user) => {
       dueDate: new Date(Date.now() + LOAN_TENOR_DAYS * 24 * 60 * 60 * 1000).toISOString(),
       requestId: prior.id,
       attestation,
-      score_breakdown: emptyBreakdown(),
+      score_breakdown: computeScoreV5(inputs).breakdown,
     }
     return json(resp, 200, req)
   }
@@ -177,16 +177,4 @@ function installmentsFor(amountBRL: number): number {
   if (amountBRL <= 3) return 1
   if (amountBRL <= 7) return 2
   return 3
-}
-
-function emptyBreakdown(): ScoreBreakdown {
-  return {
-    tempo_uber: 'ruim',
-    dias_semana: 'ruim',
-    corridas_semana: 'ruim',
-    fonte_renda: 'ruim',
-    nota_motorista: 'ruim',
-    status_veiculo: 'ruim',
-    negativacao: 'ruim',
-  }
 }

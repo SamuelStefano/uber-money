@@ -202,7 +202,7 @@ export function RequestScreen({ onSubmit, onBack }: RequestScreenProps) {
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: 'var(--mute)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Juros</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>{r.scoreResult.interest_pct.toFixed(1)}%</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>{(r.scoreResult.interest_pct * 100).toFixed(1)}%</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: 'var(--mute)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Parcelas</div>
