@@ -90,7 +90,7 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
           <motion.div variants={item}>
-            <RequestCreditCta onClick={onRequestCredit} hasActiveLoan={hasActiveLoan} />
+            <RequestCreditCta onClick={onRequestCredit} />
           </motion.div>
           <motion.div variants={item}>
             <ScoreCard value={credit.score} caption={scoreCaption} onUnlock={onRequestCredit} />

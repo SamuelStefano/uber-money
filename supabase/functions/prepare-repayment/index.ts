@@ -6,6 +6,7 @@ import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
 import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
 import { generateAndStoreRepayAttestation } from '../_shared/repay-attestation.ts'
+import { deriveCpfHash } from '../_shared/cpf-hash.ts'
 
 const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 
@@ -18,7 +19,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: loan } = await admin
     .from('loans')
-    .select('id, request_id, principal_brl, interest_pct, status, loan_requests!inner(user_id, cpf_hash)')
+    .select('id, request_id, principal_brl, interest_pct, status, cpf_hash, loan_requests!inner(user_id, cpf_hash)')
     .eq('id', loanId)
     .maybeSingle()
 
@@ -26,12 +27,17 @@ serve((req) => withAuth(req, async (req, user) => {
   if ((loan as any).loan_requests.user_id !== user.id) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: `Loan status is ${loan.status}, cannot repay` }, 409, req)
 
-  const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
-  const cpfHashBytes = typeof cpfHashRaw === 'string'
-    ? hexToBytes(cpfHashRaw)
-    : cpfHashRaw instanceof Uint8Array ? cpfHashRaw : null
-  if (!cpfHashBytes || cpfHashBytes.length !== 32) {
-    return json({ error: 'cpf_hash missing for loan; loan not disbursed yet, cannot derive repay PDA' }, 409, req)
+  const toCpfBytes = (raw: unknown): Uint8Array | null => {
+    const bytes = typeof raw === 'string' ? hexToBytes(raw) : raw instanceof Uint8Array ? raw : null
+    return bytes && bytes.length === 32 ? bytes : null
+  }
+  let cpfHashBytes = toCpfBytes((loan as any).cpf_hash) ?? toCpfBytes((loan as any).loan_requests.cpf_hash)
+  if (!cpfHashBytes) {
+    const derived = await deriveCpfHash(admin, user.id)
+    if (!derived.ok) return json({ error: derived.error }, derived.status, req)
+    cpfHashBytes = derived.cpfHash
+    await admin.from('loans').update({ cpf_hash: derived.cpfHashHex }).eq('id', loanId)
+    await admin.from('loan_requests').update({ cpf_hash: derived.cpfHashHex }).eq('id', loan.request_id)
   }
 
   const amountBRL = cappedBRL(Number(loan.principal_brl) * (1 + Number(loan.interest_pct)))
