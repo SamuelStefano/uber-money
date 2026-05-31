@@ -132,17 +132,20 @@ supabase/
   functions/
     wallet-auth         # Phantom signature → JWT
     process-document    # CNH OCR via Claude Vision
-    request-loan        # score + cria loan_request
-    request-payout      # dispatcher: action='release' (Anchor) | 'payout' (Woovi)
+    score-credit        # score V5 preview (NÃO assina — só calcula)
+    request-loan        # score + cria loan_request + assina Ed25519 attestation (LOAN_V01)
+    request-payout      # dispatcher legacy: action='release' (Anchor) | 'payout' (Woovi)
     confirm-loan        # espelha tx borrower_request_loan → DB (persiste cpf_hash)
     prepare-repayment   # cobrança Woovi de repagamento
     confirm-repayment   # espelha tx repay_loan → DB (amarra ix ao loan PDA/borrower)
     usdc-to-pix         # valida cash_out on-chain → dispara Pix (anti double-spend)
-    score-credit        # score V5 + assina attestation
-    woovi-webhook
+    get-credit-status   # score/limite/juros correntes do user
+    get-home            # agrega loan ativo + atividade + saldo + chave Pix (authed)
+    dev-reset           # limpa estado do user (gateado por ENVIRONMENT, dev only)
+    woovi-webhook       # callback Woovi (HMAC)
     _shared/
-      anchor-signer.ts  # raw tx server-side (sem IDL)
-  migrations/           # 0001-0005 (cpf_pepper per-user + cpf_hash UNIQUE)
+      anchor-signer.ts  # raw tx server-side (legacy release; sem IDL)
+  migrations/           # 0001-0010 (cpf_pepper, cpf_hash UNIQUE, repayment, cashout guard)
 .sdd/uber-money-v2/
   01-requirements.md
   02-design.md          # arquitetura + §security + §migrations
