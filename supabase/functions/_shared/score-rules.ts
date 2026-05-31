@@ -1,4 +1,4 @@
-import { CREDIT_LIMIT_MAX_BRL } from './limits.ts'
+import { cappedBRL, CREDIT_LIMIT_MAX_BRL, MONEY_CAP_BRL } from './limits.ts'
 
 export type Resposta = 'boa' | 'media' | 'ruim'
 
@@ -157,7 +157,7 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
   const score = Math.round((points / MAX_POINTS) * 1000)
 
   const baseRatio = inputs.negativacao === 'nao' ? 0.10 : 0.05
-  const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, CREDIT_LIMIT_MAX_BRL)
+  const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, CREDIT_LIMIT_MAX_BRL, MONEY_CAP_BRL)
 
   const DEMO_RELAX_LIMIT = (Deno.env.get('DEMO_RELAX_LIMIT') ?? 'true').toLowerCase() === 'true'
   if (inputs.amount_brl > limit_brl && !DEMO_RELAX_LIMIT) {
@@ -186,7 +186,7 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
     limit_brl,
     interest_pct,
     installments: installmentsFor(inputs.amount_brl),
-    approved_amount_brl: inputs.amount_brl,
+    approved_amount_brl: cappedBRL(inputs.amount_brl),
   }
 }
 
