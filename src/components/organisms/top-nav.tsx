@@ -34,7 +34,7 @@ export function TopNav() {
         <button
           onClick={onBrandClick}
           disabled={!canNav}
-          aria-label={canNav ? 'Voltar para a home' : 'Uber Money'}
+          aria-label={canNav ? 'Voltar para a home' : 'AltPay'}
           style={{
             display: 'flex', alignItems: 'center', gap: 10,
             background: 'transparent', border: 'none', padding: '4px 8px',
@@ -45,7 +45,7 @@ export function TopNav() {
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
         >
           <BrandMark size={30} />
-          <span className="tight" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>Uber Money</span>
+          <span className="tight" style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>AltPay</span>
         </button>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

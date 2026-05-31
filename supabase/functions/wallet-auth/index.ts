@@ -55,7 +55,7 @@ serve(async (req) => {
     const nonceValue = crypto.randomUUID().replace(/-/g, '')
     const { error } = await admin.from('nonces').insert({ wallet: body.wallet, value: nonceValue })
     if (error) return json({ error: error.message }, 500, req)
-    return json({ nonce: nonceValue, message: `uber-money:${nonceValue}` }, 200, req)
+    return json({ nonce: nonceValue, message: `altpay:${nonceValue}` }, 200, req)
   }
 
   if (body.action === 'verify') {
@@ -63,7 +63,7 @@ serve(async (req) => {
 
     try {
       const pk = bs58.decode(body.wallet), sig = bs58.decode(body.signature)
-      const msg = new TextEncoder().encode(`uber-money:${body.nonce}`)
+      const msg = new TextEncoder().encode(`altpay:${body.nonce}`)
       if (!nacl.sign.detached.verify(msg, sig, pk)) return json({ error: 'Invalid signature' }, 401, req)
     } catch (e) { return json({ error: 'Signature verification failed', details: String(e) }, 401, req) }
 

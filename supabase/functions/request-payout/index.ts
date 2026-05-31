@@ -198,7 +198,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   const customerEmail = authUser?.user?.email
   const customerPhone = authUser?.user?.phone
 
-  const customer: Record<string, string> = { name: customerName || 'Motorista Uber Money' }
+  const customer: Record<string, string> = { name: customerName || 'Motorista AltPay' }
   const candidateCpf = (customerCpf && customerCpf.length === 11)
     ? customerCpf
     : (body.pixKeyType === 'cpf' ? body.pixKey.replace(/\D/g, '') : '')
@@ -223,7 +223,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
       body: JSON.stringify({
         correlationID: correlationId,
         value: amountCents,
-        comment: `Uber Money - emprestimo ${body.loanId.slice(0, 8)}`,
+        comment: `AltPay - emprestimo ${body.loanId.slice(0, 8)}`,
         customer,
       }),
       signal: AbortSignal.timeout(25_000),

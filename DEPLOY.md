@@ -1,4 +1,4 @@
-# Deploy Uber Money — passo a passo
+# Deploy AltPay — passo a passo
 
 > Wallet de teste (devnet) + Woovi sandbox. Resto = prod-real.
 

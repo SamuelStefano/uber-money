@@ -6,6 +6,7 @@ import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
 import { useHome } from '@/hooks/use-home'
 import { Store } from '@/store'
+import { AMOUNT_MAX } from '@/consts/credit'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
 import { RequestCreditCta } from './_components/request-credit-cta'
@@ -44,8 +45,8 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
   const scoreCaption = credit.has_request
     ? 'Calculado a partir dos seus ganhos do Uber'
     : 'Análise instantânea · sem consulta ao SPC'
-  const limitHint = credit.has_request && credit.interest_pct
-    ? `Juros a partir de ${(credit.interest_pct * 100).toFixed(1)}%/mês`
+  const limitHint = credit.has_request
+    ? `Sobe a cada empréstimo pago em dia · saque até R$${AMOUNT_MAX} agora`
     : 'Análise leva segundos · libera USDC na hora'
 
   return (

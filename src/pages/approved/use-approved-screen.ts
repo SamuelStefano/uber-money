@@ -3,8 +3,8 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import type { Connection, PublicKey } from '@solana/web3.js'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, type PixKeyType } from '@/lib/api'
-import { buildBorrowerRequestLoanTx, buildCashOutTx, USDC_DEVNET } from '@/lib/solana-tx-builder'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
+import { buildBorrowerRequestLoanTx, buildCashOutTx, deriveLoanPda, USDC_DEVNET } from '@/lib/solana-tx-builder'
 import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
@@ -109,6 +109,27 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
     try {
       if (HAS_BACKEND && decision.requestId && decision.attestation && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
         const att = decision.attestation
+
+        // Loan PDA usa `init` (1 empréstimo por CPF na vida): se já existe on-chain,
+        // re-emitir crasha no Allocate ("already in use" → Custom 0). Recupera o
+        // empréstimo ativo e segue pro saque em vez de quebrar.
+        const loanPda = deriveLoanPda(att.cpfHashBytes)
+        const existingLoan = await connection.getAccountInfo(loanPda)
+        if (existingLoan) {
+          try {
+            const home = await getHome()
+            if (home.activeLoan) decision.loanId = home.activeLoan.id
+          } catch { /* segue com o que tiver */ }
+          const onchainUsdc = await readOnchainUsdc(connection, wallet.publicKey)
+          setRelease({
+            cpfHashHex: att.cpfHashHex,
+            amountUSDC: Number(att.amountUSDC),
+            onchainUsdc,
+          })
+          setPhase('usdc_received')
+          return
+        }
+
         const tx = await buildBorrowerRequestLoanTx({
           connection,
           payload: att,

@@ -1,4 +1,4 @@
-# Deck pitch — Uber Money (rascunho 10 slides)
+# Deck pitch — AltPay (rascunho 10 slides)
 
 **Formato:** 16:9 ou 9:16 (vertical pro pitch presencial Bienal). Keynote/Slides.
 **Tempo de pitch:** ~3 min vivo + 2-3 min Q&A.
@@ -7,7 +7,7 @@
 ---
 
 ## Slide 1 — Capa
-- **Logo Uber Money** central
+- **Logo AltPay** central
 - **Tagline:** "Crédito na hora, pra quem roda."
 - **Subtitle:** Hackanation 2026 · Solana + Chainlink · RWA
 - **Time:** Samuel Stefano · William Rodrigo · Tainan Fidelis · Orlando Souza
@@ -138,7 +138,7 @@ Motorista (Phantom) → Upload print Uber → Score Chainlink CRE
 
 ## Slide 10 — O time + próximos passos
 **Equipe:**
-- **Samuel Stefano** — lead Uber Money (full-stack + on-chain)
+- **Samuel Stefano** — lead AltPay (full-stack + on-chain)
 - **William Rodrigo** — lead Chain Oil (Token-2022)
 - **Tainan Fidelis** — TL arquitetura
 - **Orlando Souza** — mentor cripto

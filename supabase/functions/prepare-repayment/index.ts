@@ -108,7 +108,7 @@ serve((req) => withAuth(req, async (req, user) => {
       kind: 'repay',
       amount_brl: amountBRL,
       pix_key: 'pix-in-charge',
-      pix_key_type: 'random',
+      pix_key_type: 'evp',
       status: 'pending',
       woovi_correlation_id: correlationId,
       woovi_payload: {

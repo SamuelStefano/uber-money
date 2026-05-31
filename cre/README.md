@@ -1,4 +1,4 @@
-# CRE Workflow — Uber Money
+# CRE Workflow — AltPay
 
 Workflow Chainlink CRE que recebe inputs do motorista (wallet, renda, valor pedido)
 e devolve a decisão de crédito (aprovado/rejeitado, score, limite, juros).

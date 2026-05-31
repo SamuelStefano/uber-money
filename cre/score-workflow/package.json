@@ -1,5 +1,5 @@
 {
-  "name": "uber-money-score-workflow",
+  "name": "altpay-score-workflow",
   "version": "1.0.0",
   "main": "dist/main.js",
   "private": true,

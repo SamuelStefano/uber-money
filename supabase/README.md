@@ -1,4 +1,4 @@
-# Supabase Backend — Uber Money
+# Supabase Backend — AltPay
 
 Schema, RLS e Edge Functions decididos pelo squad multi-agente (DR-001).
 

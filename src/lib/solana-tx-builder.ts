@@ -35,6 +35,13 @@ export const SOL_USD_FEED_DEVNET = new PublicKey('HgTtcbcmp5BeThax5AU8vg4VwK79qA
 const LOAN_SEED = new TextEncoder().encode('loan')
 const VAULT_SEED = new TextEncoder().encode('vault')
 
+// Loan PDA é seedado por [b"loan", cpf_hash] e criado com `init` (1 empréstimo por CPF
+// na vida). Reusado pra detectar colisão antes de re-emitir (evita crash no Allocate).
+export function deriveLoanPda(cpfHashBytes: number[] | Uint8Array): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync([LOAN_SEED, new Uint8Array(cpfHashBytes)], PROGRAM_ID)
+  return pda
+}
+
 async function methodDiscriminator(name: string): Promise<Uint8Array> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`global:${name}`))
   return new Uint8Array(buf).slice(0, 8)

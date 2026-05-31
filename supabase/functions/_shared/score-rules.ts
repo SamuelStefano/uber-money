@@ -25,6 +25,7 @@ export interface ScoreInputs {
   nota_motorista: number
   status_veiculo: StatusVeiculo
   negativacao: Negativacao
+  repaid_loans_count?: number
 }
 
 export interface ScoreBreakdown {
@@ -68,6 +69,19 @@ const BASE_INTEREST = 0.025
 const MAX_INTEREST = 0.049
 const POINTS_PER: Record<Resposta, number> = { boa: 3, media: 2, ruim: 1 }
 const MAX_POINTS = 21
+
+// Linha de crédito por fidelidade (estilo cartão Nubank): o limite EXIBIDO sobe a
+// cada empréstimo pago em dia. O dinheiro REAL sacável continua capado em MONEY_CAP_BRL.
+const CREDIT_LINE_BASE_BRL = Number(Deno.env.get('CREDIT_LINE_BASE_BRL') ?? String(MONEY_CAP_BRL))
+const CREDIT_LINE_STEP_BRL = Number(Deno.env.get('CREDIT_LINE_STEP_BRL') ?? String(MONEY_CAP_BRL))
+const CREDIT_LINE_MAX_TIERS = Number(Deno.env.get('CREDIT_LINE_MAX_TIERS') ?? '4')
+
+function creditLineFor(repaidLoans: number | undefined): number {
+  const repaid = Number.isFinite(repaidLoans) ? Math.max(0, Math.floor(repaidLoans as number)) : 0
+  const tier = Math.min(repaid, CREDIT_LINE_MAX_TIERS)
+  const line = CREDIT_LINE_BASE_BRL + CREDIT_LINE_STEP_BRL * tier
+  return Math.max(MONEY_CAP_BRL, Math.min(line, CREDIT_LIMIT_MAX_BRL))
+}
 
 function classifyTempo(meses: number): Resposta {
   if (meses >= 12) return 'boa'
@@ -157,7 +171,7 @@ export function computeScoreV5(inputs: ScoreInputs): ScoreResult {
   const score = Math.round((points / MAX_POINTS) * 1000)
 
   const baseRatio = inputs.negativacao === 'nao' ? 0.10 : 0.05
-  const limit_brl = Math.min(inputs.faturamento_mensal_brl * baseRatio, CREDIT_LIMIT_MAX_BRL, MONEY_CAP_BRL)
+  const limit_brl = creditLineFor(inputs.repaid_loans_count)
 
   const DEMO_RELAX_LIMIT = (Deno.env.get('DEMO_RELAX_LIMIT') ?? 'true').toLowerCase() === 'true'
   if (inputs.amount_brl > limit_brl && !DEMO_RELAX_LIMIT) {
@@ -216,6 +230,9 @@ export function validateScoreInputs(body: unknown): ScoreInputs | { error: strin
   if (!['financiado', 'alugado', 'proprio'].includes(status_veiculo)) return { error: 'status_veiculo invalido' }
   if (!['sim', 'ja_teve', 'nao'].includes(negativacao)) return { error: 'negativacao invalido' }
 
+  const repaidRaw = Number(b.repaid_loans_count)
+  const repaid_loans_count = Number.isFinite(repaidRaw) && repaidRaw > 0 ? Math.floor(repaidRaw) : 0
+
   return {
     faturamento_mensal_brl,
     amount_brl,
@@ -227,6 +244,7 @@ export function validateScoreInputs(body: unknown): ScoreInputs | { error: strin
     nota_motorista,
     status_veiculo,
     negativacao,
+    repaid_loans_count,
   }
 }
 

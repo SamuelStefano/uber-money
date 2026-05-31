@@ -12,7 +12,7 @@ export function LimitCard({ limit, hint, onUnlock }: LimitCardProps) {
   const locked = limit === null
   return (
     <Card padded style={{ padding: 22 }}>
-      <div style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 600 }}>Limite disponível</div>
+      <div style={{ fontSize: 13, color: 'var(--mute)', fontWeight: 600 }}>Limite de crédito</div>
       {locked ? (
         <LockedCardCta heading="Solicite crédito pra desbloquear seu limite" caption={hint} onUnlock={onUnlock} />
       ) : (

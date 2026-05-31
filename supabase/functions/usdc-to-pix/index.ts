@@ -183,8 +183,8 @@ serve((req) => withAuth(req, async (req, user) => {
     charge = await createCharge({
       correlationId,
       amountBRL,
-      comment: `Uber Money - saque emprestimo ${body.loanId.slice(0, 8)}`,
-      customer: { name: customerName || 'Motorista Uber Money', ...(body.pixKeyType === 'cpf' && isValidCpf(body.pixKey.replace(/\D/g, '')) ? { taxID: body.pixKey.replace(/\D/g, '') } : {}) },
+      comment: `AltPay - saque emprestimo ${body.loanId.slice(0, 8)}`,
+      customer: { name: customerName || 'Motorista AltPay', ...(body.pixKeyType === 'cpf' && isValidCpf(body.pixKey.replace(/\D/g, '')) ? { taxID: body.pixKey.replace(/\D/g, '') } : {}) },
     })
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)

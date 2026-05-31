@@ -1,4 +1,4 @@
-# Uber Money 💸
+# AltPay 💸
 
 **Microcrédito on-chain instantâneo para motoristas de aplicativo.**
 
@@ -185,7 +185,7 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - **Q25** Helius devnet RPC + QuickNode failover.
 - **Q27** Solana devnet (não testnet).
 - **Q29** 1 Edge fn `usdc-to-pix` compartilhada com Chain Oil.
-- **Q30** Samuel = Uber Money 100%, Will = Chain Oil 100%.
+- **Q30** Samuel = AltPay 100%, Will = Chain Oil 100%.
 
 ## LGPD — frase defensável (pitch jury)
 > "Nosso contrato armazena um hash com pepper do CPF — **pseudonimização por design conforme LGPD art.13 §4º**. O CPF real fica exclusivamente no backend. Em produção migramos para identificador opaco sem nenhuma relação matemática com o CPF, eliminando o risco residual de reversão."
@@ -218,4 +218,4 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ⏳ USDC return (DR-003 D3: adiado 28/05, migration 0006 prep feita)
 
 ## Time
-Samuel Stefano (lead Uber Money) · William Rodrigo (lead Chain Oil) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto) · Josyani/Lídia (front).
+Samuel Stefano (lead AltPay) · William Rodrigo (lead Chain Oil) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto) · Josyani/Lídia (front).
