@@ -1,6 +1,5 @@
 import { admin } from './admin.ts'
 import { hexToBytes } from './bytes.ts'
-import { deriveLoanPda, PublicKey } from './anchor-signer.ts'
 import { brlToUsdc, cappedBRL } from './limits.ts'
 
 // Gera RepayAttestation Ed25519 e grava em payouts.attestation_payload.
@@ -31,6 +30,7 @@ export async function generateAndStoreRepayAttestation(payoutId: string, loanId:
     : Array.from(cpfHashRaw as Uint8Array).map((b) => b.toString(16).padStart(2, '0')).join('')
   const cpfHash = hexToBytes(cpfHashHex)
 
+  const { deriveLoanPda, PublicKey } = await import('./anchor-signer.ts')
   const [loanPdaPubkey] = deriveLoanPda(cpfHash)
   const loanPda = loanPdaPubkey.toBytes()
   const borrower = new PublicKey(userRow.wallet).toBytes()

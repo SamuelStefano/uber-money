@@ -4,10 +4,9 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
-import { connection, deriveVaultPda, PublicKey } from '../_shared/anchor-signer.ts'
 import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
 
-const PROGRAM_ID = new PublicKey(Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N')
+const PROGRAM_ID_STR = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 const VAULT_TOKEN_SEED = new TextEncoder().encode('vault_token')
 
 interface Body {
@@ -18,25 +17,25 @@ interface Body {
   clientIntentId: string
 }
 
-function deriveVaultTokenAccount(): PublicKey {
-  const [vault] = deriveVaultPda()
-  const [vta] = PublicKey.findProgramAddressSync([VAULT_TOKEN_SEED, vault.toBuffer()], PROGRAM_ID)
-  return vta
-}
-
 // D5: verificação on-chain barata mas honesta. Prova que a tx assinada pelo
 // motorista chamou nosso programa E o vault token account recebeu >= amount.
+// web3.js é importado lazy aqui (não no topo) — import estático estoura o
+// limite de boot do isolate Edge (HTTP 546).
 async function verifyCashOut(sig: string, borrowerWallet: string, amountUSDC: bigint): Promise<string | null> {
+  const { connection, deriveVaultPda, PublicKey } = await import('../_shared/anchor-signer.ts')
+  const programId = new PublicKey(PROGRAM_ID_STR)
   const conn = connection()
   const tx = await conn.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
   if (!tx) return 'tx not found on-chain (devnet)'
   if (tx.meta?.err) return `tx failed on-chain: ${JSON.stringify(tx.meta.err)}`
 
   const keys = tx.transaction.message.staticAccountKeys.map((k) => k.toBase58())
-  if (!keys.includes(PROGRAM_ID.toBase58())) return 'tx does not call uber_money program'
+  if (!keys.includes(programId.toBase58())) return 'tx does not call uber_money program'
   if (keys[0] !== borrowerWallet) return 'tx fee payer is not the borrower wallet'
 
-  const vta = deriveVaultTokenAccount().toBase58()
+  const [vault] = deriveVaultPda()
+  const [vtaPk] = PublicKey.findProgramAddressSync([VAULT_TOKEN_SEED, vault.toBuffer()], programId)
+  const vta = vtaPk.toBase58()
   const vtaIndex = keys.indexOf(vta)
   if (vtaIndex < 0) return 'vault token account not in tx'
 
