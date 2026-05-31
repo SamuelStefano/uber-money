@@ -191,7 +191,7 @@ export function RequestScreen({ onSubmit, onBack }: RequestScreenProps) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                     <div style={{ fontSize: 12, color: 'var(--mute)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Oferta</div>
                     <Pill tone={r.scoreResult.approved ? 'accent' : 'danger'} dot pulse={r.scoreResult.approved}>
-                      {r.scoreResult.approved ? `Aprovado · score ${r.scoreResult.score}` : 'Recusado'}
+                      {r.scoreResult.approved ? `Aprovado · score ${Math.round(r.scoreResult.score / 10)}/100` : 'Recusado'}
                     </Pill>
                   </div>
                   {r.scoreResult.approved ? (

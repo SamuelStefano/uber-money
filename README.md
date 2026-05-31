@@ -118,6 +118,17 @@ pnpm dev
 ```
 Abre em `http://localhost:5173`. Conecta com Phantom em **devnet**.
 
+## Runbook de demo (dia do pitch)
+
+Landmines que quebram o fluxo ao vivo — checar ANTES de subir no palco:
+
+1. **CPF fresco por demo.** PDA do loan é `[b"loan", sha256(cpf||pepper)]` com `init` (não `init_if_needed`) → **1 empréstimo por CPF lifetime**. Repetir o mesmo CPF dá `account already in use` (0x0). Use uma CNH/CPF novos a cada demo, OU rode `dev-reset` (local) pra limpar o estado do user. O CPF vem do OCR da CNH — troque a imagem.
+2. **Phantom precisa de SOL devnet.** O motorista assina e paga fee. Pré-funde a wallet: `solana airdrop 2 <PHANTOM_PUBKEY> --url devnet` (ou faucet.solana.com). Sem SOL → tx falha na assinatura.
+3. **RPC = Helius.** Setar `VITE_HELIUS_RPC_URL` (devnet) — o RPC público da Solana derruba por rate-limit no meio da demo. `VITE_QUICKNODE_RPC_URL` é failover (ver `WalletProvider.tsx`).
+4. **Vault tem USDC?** Saldo vivo cai a cada smoke (hoje ~8.8 USDC). Com cap `PAYOUT_MAX_BRL=10` cada loan saca pouco, mas confira o vault token account `2U6Tqapn…p3ST` antes. Re-funde via faucet.circle.com se baixo.
+5. **Feed Chainlink devnet é stale (~$22).** O circuit breaker `SOL < $10` fica sempre verde — isso é esperado e honesto (o valor é provar a CPI real, não halt de mercado). Não tente forçar halt ao vivo.
+6. **WOOVI_MODE.** Em `mock` o Pix auto-confirma em ~8s (sem rede). Para demo sem internet confiável, mantenha `mock`. Pix real só em `prod` (ver §4.1 do DEPLOY.md).
+
 ## Estrutura
 ```
 /                       # Front Vite+React (web app)
