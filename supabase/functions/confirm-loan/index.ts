@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
 import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
+import { deriveCpfHash } from '../_shared/cpf-hash.ts'
 
 const PROGRAM_ID = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
 const RPC_URL = Deno.env.get('SOLANA_RPC_URL') ?? 'https://api.devnet.solana.com'
@@ -51,16 +52,18 @@ serve((req) => withAuth(req, async (req, user) => {
   const onChain = await verifyTxOnChain(body.txRelease)
   if (!onChain.ok) return json({ error: onChain.error }, 400, req)
 
-  if (request.cpf_hash) {
-    const loanPdaExists = await verifyLoanPdaExists(request.cpf_hash as string)
-    if (!loanPdaExists) {
-      return json({ error: 'Loan PDA not found on-chain for this cpf_hash' }, 400, req)
-    }
+  // No flow on-chain (F+) o motorista assina request_loan direto: cpf_hash nunca
+  // passou por request-payout. Deriva e persiste aqui senão prepare-repayment trava.
+  let cpfHashHex = (request.cpf_hash as string | null) ?? null
+  if (!cpfHashHex) {
+    const derived = await deriveCpfHash(admin, user.id)
+    if (!derived.ok) return json({ error: derived.error }, derived.status, req)
+    cpfHashHex = derived.cpfHashHex
+    await admin.from('loan_requests').update({ cpf_hash: cpfHashHex }).eq('id', body.requestId)
   }
 
-  const { data: userRow } = await admin
-    .from('users').select('wallet').eq('id', user.id).maybeSingle()
-  const borrower = (userRow?.wallet as string | undefined) ?? null
+  const loanPda = await deriveLoanPdaIfExists(cpfHashHex)
+  if (!loanPda) return json({ error: 'Loan PDA not found on-chain for this cpf_hash' }, 400, req)
 
   const dueDate = new Date(Date.now() + LOAN_TENOR_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const insertRow: Record<string, unknown> = {
@@ -70,9 +73,9 @@ serve((req) => withAuth(req, async (req, user) => {
     due_date: dueDate,
     status: 'open',
     tx_release: body.txRelease,
+    cpf_hash: cpfHashHex,
+    on_chain_pda: loanPda,
   }
-  if (request.cpf_hash) insertRow.cpf_hash = request.cpf_hash
-  if (borrower) insertRow.on_chain_pda = borrower
 
   const { data: loan, error: loanErr } = await admin
     .from('loans')
@@ -128,7 +131,7 @@ async function verifyTxOnChain(txSig: string): Promise<{ ok: true } | { ok: fals
   }
 }
 
-async function verifyLoanPdaExists(cpfHashHex: string): Promise<boolean> {
+async function deriveLoanPdaIfExists(cpfHashHex: string): Promise<string | null> {
   try {
     const { PublicKey } = await import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext')
     const clean = cpfHashHex.startsWith('\\x') ? cpfHashHex.slice(2) : cpfHashHex
@@ -148,10 +151,10 @@ async function verifyLoanPdaExists(cpfHashHex: string): Promise<boolean> {
     })
     const data = await r.json() as { result?: { value?: { owner?: string } | null } }
     const value = data.result?.value
-    if (!value) return false
-    return value.owner === PROGRAM_ID
+    if (!value || value.owner !== PROGRAM_ID) return null
+    return loanPda.toBase58()
   } catch {
-    return false
+    return null
   }
 }
 

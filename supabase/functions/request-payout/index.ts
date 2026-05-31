@@ -4,12 +4,11 @@ import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
-import { sha256Concat, bufToHex, hexToBuf } from '../_shared/crypto.ts'
+import { deriveCpfHash } from '../_shared/cpf-hash.ts'
+import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
+import { WOOVI_BASE_URL, WOOVI_MODE } from '../_shared/woovi.ts'
 
 const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
-const WOOVI_BASE = Deno.env.get('WOOVI_API_URL') ?? 'https://api.openpix.com.br/api/v1'
-const WOOVI_MODE = (Deno.env.get('WOOVI_MODE') ?? 'mock').toLowerCase()
-const MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10')
 
 type ReleaseBody = { action: 'release'; loanId: string }
 type PayoutBody  = { action: 'payout';  loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
@@ -45,20 +44,11 @@ async function handleRelease(req: Request, admin: SupabaseClient, userId: string
     }, 200, req)
   }
 
-  const { data: cnh } = await admin
-    .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
-  const cpfRaw = ((cnh?.ocr_data as any)?.cpf ?? '').replace(/\D/g, '')
-  if (!cpfRaw || cpfRaw.length !== 11) return json({ error: 'CPF not extracted from CNH' }, 400, req)
-  if (!isValidCpf(cpfRaw)) return json({ error: 'CPF da CNH falhou validação módulo 11' }, 400, req)
+  const derived = await deriveCpfHash(admin, userId)
+  if (!derived.ok) return json({ error: derived.error }, derived.status, req)
+  const { cpfHash, cpfHashHex } = derived
 
-  const { data: userRow } = await admin.from('users').select('cpf_pepper, wallet').eq('id', userId).maybeSingle()
-  const pepper: Uint8Array | null = userRow?.cpf_pepper ? hexToBuf(userRow.cpf_pepper as string) : null
-  if (!pepper) return json({ error: 'User pepper not initialized' }, 500, req)
-
-  const cpfHash = await sha256Concat(new TextEncoder().encode(cpfRaw), pepper)
-  const cpfHashHex = '\\x' + bufToHex(cpfHash)
-
-  const amountUSDC = BigInt(Math.round(Math.min(Number(loan.principal_brl), MAX_BRL) * 1e6 / 5))
+  const amountUSDC = brlToUsdc(Number(loan.principal_brl))
   const score = Number((loan as any).loan_requests.score ?? 0)
 
   await admin.from('loans').update({ cpf_hash: cpfHashHex }).eq('id', loan.id)
@@ -110,12 +100,23 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 
   const { data: loan, error: loanErr } = await admin
     .from('loans')
-    .select('id, status, principal_brl, request_id, loan_requests!inner(user_id)')
+    .select('id, status, principal_brl, request_id, tx_release, loan_requests!inner(user_id)')
     .eq('id', body.loanId)
     .maybeSingle()
   if (loanErr || !loan) return json({ error: 'Loan not found' }, 404, req)
   if ((loan as any).loan_requests.user_id !== userId) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: 'Loan not open' }, 400, req)
+
+  // Anti double-spend: tx_release (setado por confirm-loan E release_loan legacy)
+  // significa que o USDC já foi pro wallet do motorista on-chain. O único Pix
+  // legítimo é via usdc-to-pix, que exige o cash_out devolvendo o USDC ao vault.
+  // O Pix legacy aqui pagaria sem o swap-back → dinheiro em dobro.
+  if (loan.tx_release) {
+    return json({ error: 'Loan disbursed on-chain; cash out via on-chain swap-back, not legacy Pix' }, 409, req)
+  }
+  const { data: cashout } = await admin.from('cashout_intents')
+    .select('id').eq('loan_id', body.loanId).neq('status', 'failed').limit(1)
+  if (cashout?.length) return json({ error: 'Loan already cashed out on-chain' }, 409, req)
 
   if (body.pixKeyType === 'cpf') {
     const { data: cnhDoc } = await admin
@@ -127,7 +128,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
     }
   }
 
-  const amountBRL = Math.min(Number(loan.principal_brl), MAX_BRL)
+  const amountBRL = cappedBRL(Number(loan.principal_brl))
   const amountCents = Math.round(amountBRL * 100)
 
   const { data: existing } = await admin
@@ -170,14 +171,18 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   if (payoutErr) return json({ error: payoutErr.message }, 500, req)
 
   if (WOOVI_MODE === 'mock') {
-    setTimeout(async () => {
+    // EdgeRuntime mata o isolate ao retornar — sem waitUntil o setTimeout nunca
+    // dispara e o payout fica preso em 'pending'.
+    const confirmLater = new Promise<void>((resolve) => setTimeout(async () => {
       try {
         await admin.from('payouts').update({
           status: 'confirmed',
           woovi_payload: { mocked: true, correlationId, paidAt: new Date().toISOString() },
         }).eq('id', payout.id)
-      } catch (e) { console.error('[mock] update failed', e) }
-    }, 8000)
+      } catch (e) { console.error('[mock] update failed', e) } finally { resolve() }
+    }, 8000))
+    const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+    if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(confirmLater)
     return json({
       payoutId: payout.id, status: 'pending', correlationId, amountBRL,
       mode: 'mock', note: 'Confirmed in ~8s via mock background update.',
@@ -186,19 +191,21 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 
   const { data: cnhDocForCustomer } = await admin
     .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
-  const customerCpf = ((cnhDocForCustomer?.ocr_data as { cpf?: string } | null)?.cpf ?? '').replace(/\D/g, '')
+  const cnhOcr = cnhDocForCustomer?.ocr_data as { cpf?: string; name?: string } | null
+  const customerCpf = (cnhOcr?.cpf ?? '').replace(/\D/g, '')
+  const customerName = cnhOcr?.name?.trim()
   const { data: authUser } = await admin.auth.admin.getUserById(userId)
   const customerEmail = authUser?.user?.email
   const customerPhone = authUser?.user?.phone
 
-  const customer: Record<string, string> = { name: 'Motorista Uber Money' }
+  const customer: Record<string, string> = { name: customerName || 'Motorista AltPay' }
   const candidateCpf = (customerCpf && customerCpf.length === 11)
     ? customerCpf
     : (body.pixKeyType === 'cpf' ? body.pixKey.replace(/\D/g, '') : '')
   if (candidateCpf && isValidCpf(candidateCpf)) {
     customer.taxID = candidateCpf
   } else if (candidateCpf) {
-    console.warn('[payout] CPF candidato falhou checksum, omitindo taxID:', candidateCpf)
+    console.warn('[payout] CPF candidato falhou checksum, omitindo taxID')
   }
   if (customerEmail) customer.email = customerEmail
   else if (body.pixKeyType === 'email') customer.email = body.pixKey
@@ -210,13 +217,13 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   }
 
   try {
-    const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
+    const wooviRes = await fetch(`${WOOVI_BASE_URL}/charge`, {
       method: 'POST',
       headers: { 'Authorization': WOOVI_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         correlationID: correlationId,
         value: amountCents,
-        comment: `Uber Money - emprestimo ${body.loanId.slice(0, 8)}`,
+        comment: `AltPay - emprestimo ${body.loanId.slice(0, 8)}`,
         customer,
       }),
       signal: AbortSignal.timeout(25_000),

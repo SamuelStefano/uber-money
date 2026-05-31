@@ -1,4 +1,4 @@
-# Uber Money 💸
+# AltPay 💸
 
 **Microcrédito on-chain instantâneo para motoristas de aplicativo.**
 
@@ -48,11 +48,11 @@ Motorista (Phantom)
 |---|---|---|
 | **CRE workflow** TS→WASM | ✅ compila + **simulate funcional** | `docs/chainlink/cre-simulate-evidence.txt` (score=650, approved) |
 | **Data Feeds Solana** (SOL/USD) | ✅ **CPI on-chain real** | tx [2Uu56mExh...yWF2](https://explorer.solana.com/tx/2Uu56mExht7tRoaxdy2W41eAx3z9kByJfrF8LiErKDUeRGpZT7G8yWVdGkQaDQ33H3e7mH3R4CxVkMtzNGQ7yWF2?cluster=devnet) (programa invoke `HEvSKof…`) |
-| Ed25519 oracle attestation | ✅ on-chain via sysvar | mesma tx acima |
+| Ed25519 oracle attestation | ✅ on-chain via sysvar + **anti-forja** (`instruction_index == 0xFFFF`) | prova on-chain: `scripts/smoke-repay-forgery.ts` (erro 6013 `InvalidRepayAttestationLayout`) |
 | CCIP cross-chain | 📋 roadmap v2 (sem EVM no MVP) | DR-004 |
 | CRE deploy + verify Sepolia | ⏳ 28/05 | Etherscan link aqui (TODO) |
 | CCIP `ccipSend` Sepolia | ⏳ 28/05 | `messageId` em [ccip.chain.link](https://ccip.chain.link) (TODO) |
-| Solana receiver | ⚠️ MOCK declarado — instruction `admin_disburse(cpf_hash, amount, score, source_chain_selector)` chamada pelo admin (não pelo CCIP router) por restrição de tempo de hackathon. Assinatura compatível com `Any2SolanaMessage`. | `programs/uber-money/src/lib.rs:104` |
+| Solana receiver (CCIP) | 📋 fora do MVP — Solana-only, sem hop CCIP. Desembolso = motorista chama `borrower_request_loan` direto (Phantom signer). CCIP cross-chain é roadmap v2. | DR-004 |
 
 **Pivot 28/05 (DR-004):** Saímos do MOCK CCIP e fomos pra **Chainlink real on-chain Solana**:
 - CRE workflow simulate funcional (Chainlink sandbox DON)
@@ -61,7 +61,7 @@ Motorista (Phantom)
 - Ed25519 attestation pre-instruction
 - Circuit breaker propositado (não decoração teatral)
 
-**Por que `borrower_request_loan` em vez de `admin_disburse`:** narrativa "microcrédito on-chain Solana" exige motorista chamando contrato direto. CCIP→Solana descartado por requerer EVM/Sepolia (incompatível com escopo Solana-only).
+**Por que `borrower_request_loan` em vez de um receiver CCIP:** narrativa "microcrédito on-chain Solana" exige motorista chamando contrato direto. CCIP→Solana descartado por requerer EVM/Sepolia (incompatível com escopo Solana-only).
 
 **Upgrade path produção:** trocar Ed25519 attestation por CCIP `ccip_receive` real via [solana-starter-kit](https://github.com/smartcontractkit/solana-starter-kit). Assinatura compatível.
 
@@ -85,8 +85,9 @@ Motorista (Phantom)
 Instructions:
 - `initialize_vault()` — one-shot, cria vault PDA `[b"vault"]` + token account
 - **`borrower_request_loan(cpf_hash, amount, score, expires_at)`** — DR-004 F+ atual: motorista é Signer, valida Ed25519 attestation + CPI Chainlink Data Feed, transfere USDC
-- `release_loan(cpf_hash, amount, score)` — admin-signed legacy (feature flag `VITE_ONCHAIN_FLOW=false`)
-- `admin_disburse(...)` — stub histórico
+- `release_loan(cpf_hash, amount, score)` — admin-signed legacy fallback (`has_one = authority`, sem attestation), usado só com `VITE_ONCHAIN_FLOW=false`
+- `repay_loan(cpf_hash, amount, nonce, expires_at)` — motorista assina + Ed25519 `REPAY_V1`, marca PDA Repaid
+- `cash_out(cpf_hash, amount)` — motorista assina swap-back USDC→vault (anti double-spend antes do Pix)
 
 PDA seed: `[b"loan", sha256(cpf || users.cpf_pepper)]` — 1 empréstimo por CPF lifetime. `init` (não `init_if_needed`) → falha hard se já existe.
 
@@ -117,6 +118,17 @@ pnpm dev
 ```
 Abre em `http://localhost:5173`. Conecta com Phantom em **devnet**.
 
+## Runbook de demo (dia do pitch)
+
+Landmines que quebram o fluxo ao vivo — checar ANTES de subir no palco:
+
+1. **CPF fresco por demo.** PDA do loan é `[b"loan", sha256(cpf||pepper)]` com `init` (não `init_if_needed`) → **1 empréstimo por CPF lifetime**. Repetir o mesmo CPF dá `account already in use` (0x0). Use uma CNH/CPF novos a cada demo, OU rode `dev-reset` (local) pra limpar o estado do user. O CPF vem do OCR da CNH — troque a imagem.
+2. **Phantom precisa de SOL devnet.** O motorista assina e paga fee. Pré-funde a wallet: `solana airdrop 2 <PHANTOM_PUBKEY> --url devnet` (ou faucet.solana.com). Sem SOL → tx falha na assinatura.
+3. **RPC = Helius.** Setar `VITE_HELIUS_RPC_URL` (devnet) — o RPC público da Solana derruba por rate-limit no meio da demo. `VITE_QUICKNODE_RPC_URL` é failover (ver `WalletProvider.tsx`).
+4. **Vault tem USDC?** Saldo vivo cai a cada smoke (hoje ~8.8 USDC). Com cap `PAYOUT_MAX_BRL=10` cada loan saca pouco, mas confira o vault token account `2U6Tqapn…p3ST` antes. Re-funde via faucet.circle.com se baixo.
+5. **Feed Chainlink devnet é stale (~$22).** O circuit breaker `SOL < $10` fica sempre verde — isso é esperado e honesto (o valor é provar a CPI real, não halt de mercado). Não tente forçar halt ao vivo.
+6. **WOOVI_MODE.** Em `mock` o Pix auto-confirma em ~8s (sem rede). Para demo sem internet confiável, mantenha `mock`. Pix real só em `prod` (ver §4.1 do DEPLOY.md).
+
 ## Estrutura
 ```
 /                       # Front Vite+React (web app)
@@ -131,13 +143,20 @@ supabase/
   functions/
     wallet-auth         # Phantom signature → JWT
     process-document    # CNH OCR via Claude Vision
-    request-loan        # score + cria loan_request
-    request-payout      # dispatcher: action='release' (Anchor) | 'payout' (Woovi)
-    parse-uber-print    # stub Will completa 28/05
-    woovi-webhook
+    score-credit        # score V5 preview (NÃO assina — só calcula)
+    request-loan        # score + cria loan_request + assina Ed25519 attestation (LOAN_V01)
+    request-payout      # dispatcher legacy: action='release' (Anchor) | 'payout' (Woovi)
+    confirm-loan        # espelha tx borrower_request_loan → DB (persiste cpf_hash)
+    prepare-repayment   # cobrança Woovi de repagamento
+    confirm-repayment   # espelha tx repay_loan → DB (amarra ix ao loan PDA/borrower)
+    usdc-to-pix         # valida cash_out on-chain → dispara Pix (anti double-spend)
+    get-credit-status   # score/limite/juros correntes do user
+    get-home            # agrega loan ativo + atividade + saldo + chave Pix (authed)
+    dev-reset           # limpa estado do user (gateado por ENVIRONMENT, dev only)
+    woovi-webhook       # callback Woovi (HMAC)
     _shared/
-      anchor-signer.ts  # raw tx server-side (sem IDL)
-  migrations/           # 0001-0005 (cpf_pepper per-user + cpf_hash UNIQUE)
+      anchor-signer.ts  # raw tx server-side (legacy release; sem IDL)
+  migrations/           # 0001-0010 (cpf_pepper, cpf_hash UNIQUE, repayment, cashout guard)
 .sdd/uber-money-v2/
   01-requirements.md
   02-design.md          # arquitetura + §security + §migrations
@@ -166,15 +185,21 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - **Q25** Helius devnet RPC + QuickNode failover.
 - **Q27** Solana devnet (não testnet).
 - **Q29** 1 Edge fn `usdc-to-pix` compartilhada com Chain Oil.
-- **Q30** Samuel = Uber Money 100%, Will = Chain Oil 100%.
+- **Q30** Samuel = AltPay 100%, Will = Chain Oil 100%.
 
 ## LGPD — frase defensável (pitch jury)
 > "Nosso contrato armazena um hash com pepper do CPF — **pseudonimização por design conforme LGPD art.13 §4º**. O CPF real fica exclusivamente no backend. Em produção migramos para identificador opaco sem nenhuma relação matemática com o CPF, eliminando o risco residual de reversão."
 
 ## Trust assumptions (transparência pré-pitch)
-- **Authority é oráculo de score implícito.** Admin assina `release_loan` confiando no score off-chain computado pela edge. Em produção: Ed25519 attestation do CRE com pubkey verificada on-chain.
-- **`borrower: AccountInfo` não-Signer.** Admin escolhe ATA destino vinculado ao JWT verificado. Em produção: borrower vira Signer via Squads multisig ou session key.
-- **CCIP último hop mockado** via `admin_disburse`. CRE Sepolia + CCIP `ccipSend` são reais (links no explorer); o callback final é admin-triggered.
+- **Oráculo de score = authority keypair.** A edge computa o score e o **oracle assina uma attestation Ed25519** (`LOAN_V01` borrow / `REPAY_V1` repay) verificada on-chain via sysvar instructions. O contrato amarra pubkey, mensagem e assinatura à mesma instrução (`instruction_index == 0xFFFF`), fechando forja — prova on-chain em `scripts/smoke-repay-forgery.ts`. Em produção: pubkey do CRE no lugar do authority.
+- **Motorista é Signer** (DR-004 F+). O borrower chama `borrower_request_loan`/`repay_loan` direto via Phantom; a attestation amarra o desembolso ao `cpf_hash` + pubkey do motorista.
+- **Sem CCIP no MVP.** Solana-only: desembolso é on-chain direto via `borrower_request_loan`. CCIP cross-chain fica como roadmap v2 (assinatura compatível com `ccip_receive`).
+- **`release_loan` legacy é admin-only** (`has_one = authority`, sem attestation/Chainlink) — só roda com `VITE_ONCHAIN_FLOW=false`. Mesma raiz de confiança do oráculo (authority == oracle keypair). Em produção: remover ou exigir a mesma attestation.
+
+### Limitações on-chain conhecidas (red-team interno, não-bloqueantes pro MVP)
+- **`repay_nonce` é gravado mas não checado on-chain.** Replay é barrado hoje por `status == Active` + 1-loan-por-CPF (PDA única por `cpf_hash`). Se a v2 permitir múltiplos loans por CPF, o nonce precisa ser enforçado (ou seed da PDA com counter).
+- **`cash_out` não tem estado terminal.** Move USDC do motorista PRA o vault (prejudica o motorista, não o protocolo) e é gateado off-chain por `cashout_intents` (índice único, fail-closed antes de qualquer Pix). v2: flipar `status` p/ `CashedOut`.
+- **Circuit breaker lê feed devnet stale (~$22).** O guard `SOL < $10` está sempre verde; o valor está em provar a CPI real (programa + feed pinados), não em halt de mercado real.
 
 ## Status (27/05/2026 — gate EOD batido ✅)
 - ✅ Anchor program **DEPLOYADO em devnet** (program ID acima)
@@ -182,7 +207,7 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ✅ Smoke test on-chain passou (1 USDC transferido pelo programa)
 - ✅ Edge `request-payout` (com Anchor signer server-side raw tx) deployada
 - ✅ Edge `wallet-auth` (fix DR-003: sem `session_id` fake) deployada
-- ✅ Edge `parse-uber-print` stub deployada (Will completa OCR real 28/05)
+- ✅ Edge `process-document` (OCR real via Claude vision) deployada
 - ✅ Migration 0005 aplicada (users.cpf_pepper per-user + loans.cpf_hash UNIQUE)
 - ✅ Front 6 telas atomic design + 2-step UX (`Efetuar` → `Sacar`)
 - ✅ Wallet UX: Phantom only, autoConnect=false, dedupe signMessage
@@ -193,4 +218,4 @@ User-facing cap dispara primeiro. On-chain cap só protege se cap edge for bypas
 - ⏳ USDC return (DR-003 D3: adiado 28/05, migration 0006 prep feita)
 
 ## Time
-Samuel Stefano (lead Uber Money) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto).
+Samuel Stefano (lead AltPay) · William Rodrigo (lead Chain Oil) · Tainan Fidelis (TL/arquitetura) · Orlando Souza (mentor cripto) · Josyani/Lídia (front).

@@ -12,6 +12,7 @@ type ClaimPhase = 'approved' | 'releasing' | 'usdc_received' | 'sacando' | 'done
 interface ReleaseInfo {
   amountUSDC?: number
   txRelease?: string
+  onchainUsdc?: number
 }
 
 interface ApprovedHeroProps {
@@ -79,6 +80,11 @@ export function ApprovedHero({ decision, phase, release, onEfetuar, onSacar, onS
           maxWidth: 480, margin: '16px auto 0',
         }}>
           tx Solana: <TxLink hash={release.txRelease} cluster="devnet" short />
+          {typeof release.onchainUsdc === 'number' && (
+            <div style={{ marginTop: 6 }}>
+              saldo on-chain: <strong style={{ color: 'var(--ink)' }}>{release.onchainUsdc} USDC</strong>
+            </div>
+          )}
         </div>
       )}
 

@@ -19,11 +19,11 @@ export const REASONS: readonly ReasonOption[] = [
   { id: 'outro', label: 'Outro', iconName: 'dots', range: 'até R$10.000', minBRL: 1, maxBRL: 10000 },
 ] as const
 
-export const AMOUNT_CHIPS = [100, 500, 1000, 3000] as const
+export const AMOUNT_CHIPS = [1, 2, 3, 5] as const
 export const AMOUNT_MIN = 1
-export const AMOUNT_MAX = 10000
-export const AMOUNT_STEP = 10
-export const AMOUNT_DEFAULT = 300
+export const AMOUNT_MAX = 5
+export const AMOUNT_STEP = 1
+export const AMOUNT_DEFAULT = 5
 
 export const SCORE_THRESHOLD = 600
 export const SCORE_MAX = 1000

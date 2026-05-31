@@ -21,6 +21,10 @@ const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify11111111111111111111
 
 const SOL_USD_FEED_DEVNET: Pubkey = pubkey!("HgTtcbcmp5BeThax5AU8vg4VwK79qAvAKKFMs8txMLW6");
 
+// Chainlink Store program (devnet). Sem pin, um atacante passaria um programa
+// falso que devolve answer alto e burlaria o circuit breaker.
+const CHAINLINK_PROGRAM_ID: Pubkey = pubkey!("HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny");
+
 // feed devnet stale em ~$22 (mar/2023); threshold $10 garante happy path sem false-halt
 const SOL_CRASH_MIN: i128 = 10_00000000;
 
@@ -70,6 +74,7 @@ pub mod uber_money {
             &ed25519_data,
             &ORACLE_PUBKEY,
             cpf_hash,
+            ctx.accounts.borrower.key(),
             amount,
             score,
             expires_at,
@@ -237,6 +242,32 @@ pub mod uber_money {
         });
         Ok(())
     }
+
+    pub fn cash_out(ctx: Context<CashOut>, cpf_hash: [u8; 32], amount: u64) -> Result<()> {
+        require!(ctx.accounts.loan.status == LOAN_STATUS_ACTIVE, UberError::LoanAlreadyRepaid);
+        require!(amount > 0, UberError::InvalidAmount);
+        require!(amount <= ctx.accounts.loan.amount, UberError::InvalidAmount);
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.borrower_token_account.to_account_info(),
+                    to: ctx.accounts.vault_token_account.to_account_info(),
+                    authority: ctx.accounts.borrower.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        emit!(LoanCashedOut {
+            borrower: ctx.accounts.borrower.key(),
+            cpf_hash,
+            amount,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+        Ok(())
+    }
 }
 
 // https://docs.solanalabs.com/runtime/programs#ed25519-program
@@ -244,12 +275,24 @@ fn verify_ed25519_attestation(
     data: &[u8],
     expected_signer: &Pubkey,
     cpf_hash: [u8; 32],
+    borrower: Pubkey,
     amount: u64,
     score: u16,
     expires_at: i64,
 ) -> Result<()> {
     require!(data.len() >= 16, UberError::InvalidAttestationLayout);
     require!(data[0] == 1, UberError::InvalidAttestationLayout);
+
+    // Os *_instruction_index DEVEM ser 0xFFFF (esta ix). Senão o atacante aponta
+    // pubkey/msg/sig pra outra ix com assinatura própria válida — o programa nativo
+    // verifica AQUELA, mas nós lemos os bytes do oracle aqui = forja da attestation.
+    let sig_ix_idx = u16::from_le_bytes([data[4], data[5]]);
+    let pk_ix_idx = u16::from_le_bytes([data[8], data[9]]);
+    let msg_ix_idx = u16::from_le_bytes([data[14], data[15]]);
+    require!(
+        sig_ix_idx == 0xFFFF && pk_ix_idx == 0xFFFF && msg_ix_idx == 0xFFFF,
+        UberError::InvalidAttestationLayout
+    );
 
     let pubkey_offset = u16::from_le_bytes([data[6], data[7]]) as usize;
     let msg_offset = u16::from_le_bytes([data[10], data[11]]) as usize;
@@ -264,8 +307,10 @@ fn verify_ed25519_attestation(
         UberError::WrongOracleSigner
     );
 
-    let mut expected = Vec::with_capacity(50);
+    let mut expected = Vec::with_capacity(90);
+    expected.extend_from_slice(b"LOAN_V01");
     expected.extend_from_slice(&cpf_hash);
+    expected.extend_from_slice(&borrower.to_bytes());
     expected.extend_from_slice(&amount.to_le_bytes());
     expected.extend_from_slice(&score.to_le_bytes());
     expected.extend_from_slice(&expires_at.to_le_bytes());
@@ -288,6 +333,14 @@ fn verify_ed25519_repay_attestation(
 ) -> Result<()> {
     require!(data.len() >= 16, UberError::InvalidRepayAttestationLayout);
     require!(data[0] == 1, UberError::InvalidRepayAttestationLayout);
+
+    let sig_ix_idx = u16::from_le_bytes([data[4], data[5]]);
+    let pk_ix_idx = u16::from_le_bytes([data[8], data[9]]);
+    let msg_ix_idx = u16::from_le_bytes([data[14], data[15]]);
+    require!(
+        sig_ix_idx == 0xFFFF && pk_ix_idx == 0xFFFF && msg_ix_idx == 0xFFFF,
+        UberError::InvalidRepayAttestationLayout
+    );
 
     let pubkey_offset = u16::from_le_bytes([data[6], data[7]]) as usize;
     let msg_offset = u16::from_le_bytes([data[10], data[11]]) as usize;
@@ -371,7 +424,8 @@ pub struct BorrowerRequestLoan<'info> {
     pub borrower_token_account: Account<'info, TokenAccount>,
     /// CHECK: Chainlink Data Feed account (validado por endereço hardcoded)
     pub chainlink_feed: AccountInfo<'info>,
-    /// CHECK: chainlink_solana program (validado pelo crate ao chamar)
+    /// CHECK: chainlink_solana program (pin por endereço)
+    #[account(address = CHAINLINK_PROGRAM_ID)]
     pub chainlink_program: AccountInfo<'info>,
     /// CHECK: sysvar instructions (validado por endereço)
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
@@ -424,6 +478,30 @@ pub struct RepayLoan<'info> {
     /// CHECK: sysvar instructions (validado por endereço)
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instructions_sysvar: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(cpf_hash: [u8; 32])]
+pub struct CashOut<'info> {
+    #[account(seeds = [VAULT_SEED], bump = vault.bump)]
+    pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub borrower: Signer<'info>,
+    #[account(
+        seeds = [LOAN_SEED, cpf_hash.as_ref()],
+        bump = loan.bump,
+        has_one = borrower,
+    )]
+    pub loan: Account<'info, Loan>,
+    #[account(
+        mut,
+        token::mint = vault.usdc_mint,
+        token::authority = borrower
+    )]
+    pub borrower_token_account: Account<'info, TokenAccount>,
+    #[account(mut, address = vault.token_account)]
+    pub vault_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[account]
@@ -483,6 +561,14 @@ pub struct LoanRepaid {
     pub loan: Pubkey,
     pub amount_paid_usdc: u64,
     pub repaid_at: i64,
+}
+
+#[event]
+pub struct LoanCashedOut {
+    pub borrower: Pubkey,
+    pub cpf_hash: [u8; 32],
+    pub amount: u64,
+    pub timestamp: i64,
 }
 
 #[error_code]

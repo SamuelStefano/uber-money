@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import type { Connection, PublicKey } from '@solana/web3.js'
 import { useToast } from '@/components/organisms/toast-provider'
 import { sendPixMock } from '@/lib/mock'
-import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, type PixKeyType } from '@/lib/api'
-import { buildBorrowerRequestLoanTx } from '@/lib/solana-tx-builder'
+import { HAS_BACKEND, releaseLoan, requestPayout, pollUntilConfirmed, confirmLoan, cashOutToPix, getHome, type PixKeyType } from '@/lib/api'
+import { buildBorrowerRequestLoanTx, buildCashOutTx, deriveLoanPda, USDC_DEVNET } from '@/lib/solana-tx-builder'
+import { getAssociatedTokenAddress } from '@solana/spl-token'
 import { Store } from '@/store'
 import { dateBR } from '@/utils/format'
 import { generateConfettiDots, type ConfettiDot } from '@/utils/confetti'
@@ -27,6 +29,7 @@ interface ReleaseInfo {
   cpfHashHex?: string
   amountUSDC?: number
   txRelease?: string
+  onchainUsdc?: number
 }
 
 interface UseApprovedScreenOutput {
@@ -59,6 +62,16 @@ async function executePayout(decision: LoanDecision, pixKey: string, pixKeyType:
     return pollUntilConfirmed(r.payoutId)
   }
   return sendPixMock({ amountBRL: decision.approvedAmountBRL, to: pixKey })
+}
+
+async function readOnchainUsdc(connection: Connection, owner: PublicKey): Promise<number | undefined> {
+  try {
+    const ata = await getAssociatedTokenAddress(USDC_DEVNET, owner)
+    const bal = await connection.getTokenAccountBalance(ata)
+    return bal.value.uiAmount ?? undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseApprovedScreenOutput {
@@ -96,6 +109,27 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
     try {
       if (HAS_BACKEND && decision.requestId && decision.attestation && ONCHAIN_FLOW && wallet.publicKey && wallet.signTransaction) {
         const att = decision.attestation
+
+        // Loan PDA usa `init` (1 empréstimo por CPF na vida): se já existe on-chain,
+        // re-emitir crasha no Allocate ("already in use" → Custom 0). Recupera o
+        // empréstimo ativo e segue pro saque em vez de quebrar.
+        const loanPda = deriveLoanPda(att.cpfHashBytes)
+        const existingLoan = await connection.getAccountInfo(loanPda)
+        if (existingLoan) {
+          try {
+            const home = await getHome()
+            if (home.activeLoan) decision.loanId = home.activeLoan.id
+          } catch { /* segue com o que tiver */ }
+          const onchainUsdc = await readOnchainUsdc(connection, wallet.publicKey)
+          setRelease({
+            cpfHashHex: att.cpfHashHex,
+            amountUSDC: Number(att.amountUSDC),
+            onchainUsdc,
+          })
+          setPhase('usdc_received')
+          return
+        }
+
         const tx = await buildBorrowerRequestLoanTx({
           connection,
           payload: att,
@@ -119,10 +153,13 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
           return null
         })
 
+        const onchainUsdc = await readOnchainUsdc(connection, wallet.publicKey)
+
         setRelease({
           cpfHashHex: att.cpfHashHex,
           amountUSDC: Number(att.amountUSDC),
           txRelease: sig,
+          onchainUsdc,
         })
         if (confirmed) decision.loanId = confirmed.loanId
       } else if (HAS_BACKEND && decision.loanId) {
@@ -154,26 +191,58 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
   const [showPixModal, setShowPixModal] = useState(false)
   const sacar = useCallback(() => { setShowPixModal(true) }, [])
   const closePixModal = useCallback(() => { setShowPixModal(false) }, [])
+  // UUID estável por sessão de saque → idempotência do cashout_intents em retries
+  const intentIdRef = useRef<string>(crypto.randomUUID())
 
   const confirmPix = useCallback(async (pixKey: string, pixKeyType: PixKeyType) => {
     setShowPixModal(false)
     setPhase('sacando')
     try {
-      const r = await executePayout(decision, pixKey, pixKeyType)
+      // DR-008 + Opção A: saque é swap-back on-chain. Motorista assina cash_out
+      // (USDC wallet→vault), edge valida a tx e só então dispara o Pix → mata double-spend.
+      const onchainCashout = HAS_BACKEND && ONCHAIN_FLOW && decision.loanId && decision.attestation
+        && wallet.publicKey && wallet.signTransaction
+      let r: PayoutReceipt
+      if (onchainCashout) {
+        const att = decision.attestation!
+        const tx = await buildCashOutTx({
+          connection,
+          borrower: wallet.publicKey!,
+          cpfHashBytes: att.cpfHashBytes,
+          amountUSDC: att.amountUSDC,
+        })
+        const sim = await connection.simulateTransaction(tx, undefined, [wallet.publicKey!])
+        if (sim.value.err) {
+          throw new Error(`Simulate cash_out falhou: ${JSON.stringify(sim.value.err)}\n${(sim.value.logs ?? []).join('\n')}`)
+        }
+        const signed = await wallet.signTransaction!(tx)
+        const sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: true, maxRetries: 3 })
+        await connection.confirmTransaction(sig, 'confirmed')
+        const resp = await cashOutToPix({
+          loanId: decision.loanId!,
+          cashOutTxSig: sig,
+          pixKey, pixKeyType,
+          clientIntentId: intentIdRef.current,
+        })
+        r = { id: resp.payoutId, amountBRL: resp.amountBRL, timestamp: new Date().toISOString(), to: pixKey }
+      } else {
+        r = await executePayout(decision, pixKey, pixKeyType)
+      }
+      const loanRef = decision.loanId || decision.requestId
       Store.set((s) => ({
         ...s,
-        wallet: { ...s.wallet, balanceBRL: s.wallet.balanceBRL + decision.approvedAmountBRL, pixKey },
+        wallet: { ...s.wallet, balanceBRL: s.wallet.balanceBRL + r.amountBRL, pixKey },
         activity: [
           {
             id: r.id,
             kind: 'pix',
-            amountBRL: decision.approvedAmountBRL,
+            amountBRL: r.amountBRL,
             label: 'Pix recebido',
-            sub: `Empréstimo ${decision.loanId.slice(0, 8)} · agora`,
+            sub: `Empréstimo ${loanRef.slice(0, 8)} · agora`,
             timestamp: r.timestamp,
           },
           {
-            id: decision.loanId,
+            id: loanRef,
             kind: 'loan',
             amountBRL: decision.approvedAmountBRL,
             label: 'Empréstimo aberto',
@@ -190,11 +259,16 @@ export function useApprovedScreen({ decision }: UseApprovedScreenInput): UseAppr
       setTimeout(() => setShowNotif(false), PIX_NOTIFICATION_DURATION_MS)
       setPhase('done')
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
       console.error('[sacar] payout failed:', e)
-      toast.push(e instanceof Error ? e.message : 'Pix demorou demais. Tente de novo.')
+      if (msg.includes('User rejected') || msg.includes('cancelled')) {
+        setPhase('usdc_received')
+        return
+      }
+      toast.push(msg || 'Pix demorou demais. Tente de novo.')
       setPhase('usdc_received')
     }
-  }, [decision, toast])
+  }, [decision, toast, connection, wallet])
 
   return {
     phase, release, receipt,

@@ -36,7 +36,7 @@ export function ApprovedScreen({ decision, onHome, onRepay }: ApprovedScreenProp
           onHome={onHome}
           onRepay={onRepay}
         />
-        <PixNotification show={a.showNotif} amountBRL={decision.approvedAmountBRL} />
+        <PixNotification show={a.showNotif} amountBRL={a.receipt?.amountBRL ?? decision.approvedAmountBRL} />
 
         <Sheet open={a.showReceipt} onClose={() => a.setShowReceipt(false)}>
           {a.receipt && <Receipt receipt={a.receipt} decision={decision} onClose={() => a.setShowReceipt(false)} />}

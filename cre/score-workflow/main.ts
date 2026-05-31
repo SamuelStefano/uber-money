@@ -76,7 +76,7 @@ function computeScore(input: WorkflowInput, cfg: Config): Decision {
 }
 
 const onHTTPTrigger = (runtime: Runtime<Config>, payload: HTTPPayload): string => {
-	runtime.log('CRE workflow triggered (Uber Money score)')
+	runtime.log('CRE workflow triggered (AltPay score)')
 
 	if (!payload.input || payload.input.length === 0) {
 		throw new Error('HTTP trigger payload is required')

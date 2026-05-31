@@ -48,7 +48,7 @@ export interface PayoutReceipt {
   to: string
 }
 
-export type ActivityKind = 'loan' | 'pix'
+export type ActivityKind = 'loan' | 'pix' | 'repay'
 
 export interface ActivityItem {
   id: string

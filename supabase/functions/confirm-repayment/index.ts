@@ -3,7 +3,7 @@ import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { base58Decode } from '../_shared/crypto.ts'
-import { bytesEqual } from '../_shared/bytes.ts'
+import { bytesEqual, hexToBytes } from '../_shared/bytes.ts'
 import { anchorDiscriminator } from '../_shared/anchor.ts'
 
 const PROGRAM_ID = Deno.env.get('PROGRAM_ID') ?? '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
@@ -29,7 +29,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: loan } = await admin
     .from('loans')
-    .select('id, tx_repay, status, on_chain_pda, repaid_at, loan_requests!inner(user_id)')
+    .select('id, tx_repay, status, updated_at, cpf_hash, loan_requests!inner(user_id)')
     .eq('id', body.loanId)
     .maybeSingle()
   if (!loan) return json({ error: 'Loan not found' }, 404, req)
@@ -42,7 +42,7 @@ serve((req) => withAuth(req, async (req, user) => {
       loanId: body.loanId,
       status: 'paid',
       txRepay: body.txRepay,
-      repaidAt: loan.repaid_at as string,
+      repaidAt: (loan.updated_at as string | null) ?? new Date().toISOString(),
       explorer: explorerFor(body.txRepay),
     }
     return json(resp, 200, req)
@@ -71,7 +71,7 @@ serve((req) => withAuth(req, async (req, user) => {
     transaction: {
       message: {
         accountKeys: string[]
-        instructions: Array<{ programIdIndex: number; data: string }>
+        instructions: Array<{ programIdIndex: number; data: string; accounts: number[] }>
       }
     }
   } | null
@@ -92,10 +92,35 @@ serve((req) => withAuth(req, async (req, user) => {
   })
   if (!matched) return json({ error: 'Tx does not contain repay_loan instruction' }, 400, req)
 
+  // Amarra a ix a ESTE loan: senão qualquer tx repay_loan de outro empréstimo
+  // marcaria este como pago. Layout repay_loan: [0]=borrower, [1]=loan PDA.
+  const cpfHashHex = loan.cpf_hash as string | null
+  if (!cpfHashHex) return json({ error: 'Loan has no cpf_hash; cannot verify repay binding' }, 409, req)
+  const expectedLoanPda = await deriveLoanPda(cpfHashHex)
+
+  const { data: borrowerRow } = await admin
+    .from('users').select('wallet').eq('id', loanRequest.user_id).maybeSingle()
+  const expectedBorrower = borrowerRow?.wallet as string | null
+  if (!expectedBorrower) return json({ error: 'Borrower wallet missing; cannot verify repay binding' }, 409, req)
+
+  // Versioned tx com Address Lookup Table teria índices fora de accountKeys
+  // (que só lista as static keys). Sem isso, a comparação viraria undefined.
+  if (matched.accounts[0] >= accountKeys.length || matched.accounts[1] >= accountKeys.length) {
+    return json({ error: 'repay_loan accounts out of range (lookup table not supported)' }, 400, req)
+  }
+  const ixLoanPda = accountKeys[matched.accounts[1]]
+  const ixBorrower = accountKeys[matched.accounts[0]]
+  if (ixLoanPda !== expectedLoanPda) {
+    return json({ error: 'repay_loan instruction targets a different loan PDA' }, 400, req)
+  }
+  if (ixBorrower !== expectedBorrower) {
+    return json({ error: 'repay_loan instruction signed by a different borrower' }, 400, req)
+  }
+
   const now = new Date().toISOString()
   const { data: updated, error: updErr } = await admin
     .from('loans')
-    .update({ status: 'paid', tx_repay: body.txRepay, repaid_at: now })
+    .update({ status: 'paid', tx_repay: body.txRepay })
     .eq('id', body.loanId)
     .is('tx_repay', null)
     .select('id')
@@ -112,6 +137,16 @@ serve((req) => withAuth(req, async (req, user) => {
   }
   return json(resp, 200, req)
 }))
+
+async function deriveLoanPda(cpfHashHex: string): Promise<string> {
+  const { PublicKey } = await import('https://esm.sh/@solana/web3.js@1.95.3?target=denonext')
+  const cpfHash = hexToBytes(cpfHashHex)
+  const [loanPda] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode('loan'), cpfHash],
+    new PublicKey(PROGRAM_ID),
+  )
+  return loanPda.toBase58()
+}
 
 function explorerFor(sig: string): string {
   const cluster = RPC_URL.includes('devnet') ? 'devnet' : RPC_URL.includes('testnet') ? 'testnet' : 'mainnet-beta'

@@ -1,5 +1,7 @@
 import nacl from 'https://esm.sh/tweetnacl@1.0.3'
-import { sha256Concat, bufToHex, bufToBase58, hexToBuf } from './crypto.ts'
+import { sha256Concat, bufToHex, bufToBase58, hexToBuf, base58Decode } from './crypto.ts'
+
+const LOAN_ATTEST_PREFIX = new TextEncoder().encode('LOAN_V01')
 
 const ADMIN_KEYPAIR_JSON = Deno.env.get('SOLANA_ADMIN_KEYPAIR_JSON') ?? ''
 const DEFAULT_TTL_SECS = 300
@@ -54,7 +56,8 @@ function i64LE(n: bigint): Uint8Array {
 
 /**
  * Builds an Ed25519-signed attestation for the on-chain `borrower_request_loan` ix.
- * Message layout (50 bytes): cpfHash(32) || amountLE(8) || scoreLE(2) || expiresAtLE(8).
+ * Message layout (90 bytes): "LOAN_V01"(8) || cpfHash(32) || borrower(32) || amountLE(8) || scoreLE(2) || expiresAtLE(8).
+ * The borrower pubkey is signed so a leaked attestation cannot be redeemed by a different wallet.
  */
 export async function buildAttestation(opts: BuildAttestationOpts): Promise<AttestationPayload> {
   const cpfDigits = opts.cpf.replace(/\D/g, '')
@@ -62,14 +65,19 @@ export async function buildAttestation(opts: BuildAttestationOpts): Promise<Atte
   const pepper = hexToBuf(opts.pepperHex)
   const cpfHash = await sha256Concat(new TextEncoder().encode(cpfDigits), pepper)
 
+  const borrowerBytes = base58Decode(opts.borrowerWallet)
+  if (borrowerBytes.length !== 32) throw new Error('borrowerWallet must decode to 32 bytes')
+
   const ttl = opts.ttlSeconds ?? DEFAULT_TTL_SECS
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + ttl)
 
-  const message = new Uint8Array(50)
-  message.set(cpfHash, 0)
-  message.set(u64LE(opts.amountUSDC), 32)
-  message.set(u16LE(opts.score), 40)
-  message.set(i64LE(expiresAt), 42)
+  const message = new Uint8Array(90)
+  message.set(LOAN_ATTEST_PREFIX, 0)
+  message.set(cpfHash, 8)
+  message.set(borrowerBytes, 40)
+  message.set(u64LE(opts.amountUSDC), 72)
+  message.set(u16LE(opts.score), 80)
+  message.set(i64LE(expiresAt), 82)
 
   const keypair = loadAdminEd25519Keypair()
   const signature = nacl.sign.detached(message, keypair.secretKey)

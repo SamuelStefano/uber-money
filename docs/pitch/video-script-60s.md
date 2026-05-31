@@ -1,4 +1,4 @@
-# Vídeo 60s — Uber Money (Hackanation 2026)
+# Vídeo 60s — AltPay (Hackanation 2026)
 
 **Formato:** 9:16 vertical (mobile-first), 1080×1920. Submissão Taikai + IG/X.
 **Voice-over:** PT-BR neutro, Samuel grava no celular ou usa ElevenLabs (clone voz).
@@ -14,8 +14,8 @@
 **Texto na tela:** `9 milhões de motoristas. R$50 que faltam pra rodar.`
 
 ### 5–15s · SOLUÇÃO EM 1 FRASE
-**Visual:** logo Uber Money zooming in, slogan abaixo. Pills coloridos: SOLANA · CHAINLINK · WOOVI · PIX.
-**Voice-over:** "Uber Money: empréstimo em segundos com score on-chain, juros baixos, sem consulta ao SPC."
+**Visual:** logo AltPay zooming in, slogan abaixo. Pills coloridos: SOLANA · CHAINLINK · WOOVI · PIX.
+**Voice-over:** "AltPay: empréstimo em segundos com score on-chain, juros baixos, sem consulta ao SPC."
 **Texto na tela:** `Crédito na hora, pra quem roda.`
 
 ### 15–30s · LIVE DEMO (login + score)
@@ -70,7 +70,7 @@ pneu   pills  flow   bipa   selos   url
 - [ ] Sem termos "criptomoeda" / "DeFi" pesados — "empréstimo on-chain", "score Chainlink", "Pix"
 
 ## Assets necessários
-- Logo Uber Money SVG (high-res)
+- Logo AltPay SVG (high-res)
 - Selos sponsor (Solana, Chainlink, Woovi, DFL)
 - Trilha lo-fi (royalty-free: epidemicsound, artlist)
 - Tx hashes reais (já gravados):

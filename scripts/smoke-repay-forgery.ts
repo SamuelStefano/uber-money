@@ -10,6 +10,13 @@ import { createHash, randomBytes } from 'node:crypto'
 import nacl from 'tweetnacl'
 import fs from 'node:fs'
 
+// NEGATIVE TEST: prova on-chain que o guard instruction_index == 0xFFFF mata a
+// forja de attestation. Constrói um repay_loan VÁLIDO (oracle assina REPAY_V1),
+// mas adultera o campo message_instruction_index da ix Ed25519 de 0xFFFF -> 0x0000.
+// Com a ix Ed25519 no índice 0 da tx, 0x0000 aponta pra ela mesma => o programa
+// nativo Ed25519 AINDA verifica a mesma mensagem (passa). Pré-fix o repay_loan
+// teria aceitado. Pós-fix o guard rejeita: InvalidRepayAttestationLayout.
+
 const PROGRAM_ID = new PublicKey('6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N')
 const USDC_DEVNET = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
 const SOL_USD_FEED_DEVNET = new PublicKey('HgTtcbcmp5BeThax5AU8vg4VwK79qAvAKKFMs8txMLW6')
@@ -34,12 +41,9 @@ async function fetchVaultTokenAccount(conn: Connection, vault: PublicKey): Promi
 async function main() {
   const conn = new Connection(RPC, 'confirmed')
   const admin = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'))))
-  console.log('Admin (oracle):', admin.publicKey.toBase58())
-
   const borrower = Keypair.generate()
   console.log('Borrower:', borrower.publicKey.toBase58())
 
-  console.log('\n[1] Fundando borrower com 0.05 SOL…')
   const fundTx = new Transaction().add(SystemProgram.transfer({
     fromPubkey: admin.publicKey, toPubkey: borrower.publicKey, lamports: 50_000_000,
   }))
@@ -50,13 +54,8 @@ async function main() {
 
   const [vault] = PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID)
   const vaultTokenAccount = await fetchVaultTokenAccount(conn, vault)
-  const cpfHash = createHash('sha256').update('99988877766-smoke-repay-' + Date.now()).digest()
-  const [loanPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('loan'), cpfHash], PROGRAM_ID,
-  )
-  console.log('  Vault:', vault.toBase58())
-  console.log('  Loan PDA:', loanPda.toBase58())
-
+  const cpfHash = createHash('sha256').update('99988877766-forgery-' + Date.now()).digest()
+  const [loanPda] = PublicKey.findProgramAddressSync([Buffer.from('loan'), cpfHash], PROGRAM_ID)
   const borrowerAta = await getAssociatedTokenAddress(USDC_DEVNET, borrower.publicKey)
 
   const amount = 1_000_000n
@@ -65,7 +64,7 @@ async function main() {
   const releaseMessage = Buffer.concat([Buffer.from('LOAN_V01'), cpfHash, borrower.publicKey.toBuffer(), u64LE(amount), u16LE(score), i64LE(expiresAt)])
   const releaseSig = nacl.sign.detached(releaseMessage, admin.secretKey)
 
-  console.log('\n[2] tx 1: borrower_request_loan (libera USDC + cria PDA Active)…')
+  console.log('\n[1] borrow (setup do loan Active)…')
   const releaseEd25519 = Ed25519Program.createInstructionWithPublicKey({
     publicKey: admin.publicKey.toBytes(), message: releaseMessage, signature: releaseSig,
   })
@@ -87,40 +86,34 @@ async function main() {
     ],
     data: releaseData,
   })
-  const ataIx = createAssociatedTokenAccountIdempotentInstruction(
-    borrower.publicKey, borrowerAta, borrower.publicKey, USDC_DEVNET,
-  )
+  const ataIx = createAssociatedTokenAccountIdempotentInstruction(borrower.publicKey, borrowerAta, borrower.publicKey, USDC_DEVNET)
   const tx1 = new Transaction().add(releaseEd25519).add(ataIx).add(releaseIx)
   tx1.feePayer = borrower.publicKey
   tx1.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
   tx1.sign(borrower)
-  const sig1 = await conn.sendRawTransaction(tx1.serialize())
-  await conn.confirmTransaction(sig1, 'confirmed')
-  console.log('  ✓ release tx:', sig1)
+  await conn.confirmTransaction(await conn.sendRawTransaction(tx1.serialize()), 'confirmed')
+  console.log('  ✓ loan Active')
 
-  const loanBefore = await conn.getAccountInfo(loanPda)
-  if (!loanBefore) throw new Error('Loan PDA not found after release')
-  const statusBefore = loanBefore.data[8 + 32 + 32 + 8 + 2 + 8 + 16 + 1]
-  console.log('  Loan PDA status (pre-repay):', statusBefore, '(0=Active)')
-
-  console.log('\n[3] Simula webhook Woovi → buildRepayAttestation (oracle assina REPAY_V1)…')
+  console.log('\n[2] Forja: oracle assina REPAY_V1 legítimo, mas adulteramos o layout…')
   const nonce = randomBytes(8)
   const expiresRepay = BigInt(Math.floor(Date.now() / 1000) + 300)
   const repayMessage = Buffer.concat([
     DOMAIN_REPAY, cpfHash, loanPda.toBytes(), borrower.publicKey.toBytes(),
     u64LE(amount), nonce, i64LE(expiresRepay),
   ])
-  if (repayMessage.length !== 128) throw new Error('Repay msg length != 128: ' + repayMessage.length)
   const repaySig = nacl.sign.detached(repayMessage, admin.secretKey)
-  console.log('  Repay msg (128B):', repayMessage.toString('hex').slice(0, 32) + '…')
-
-  console.log('\n[4] tx 2: repay_loan (borrower assina, oracle attestation Ed25519)…')
   const repayEd25519 = Ed25519Program.createInstructionWithPublicKey({
     publicKey: admin.publicKey.toBytes(), message: repayMessage, signature: repaySig,
   })
-  const repayData = Buffer.concat([
-    disc('repay_loan'), cpfHash, u64LE(amount), nonce, i64LE(expiresRepay),
-  ])
+
+  // ADULTERAÇÃO: message_instruction_index (bytes [14,15] do header) 0xFFFF -> 0x0000.
+  // Com a ix Ed25519 no índice 0, 0x0000 aponta pra ela mesma => nativo passa.
+  // O guard novo exige 0xFFFF, então deve reverter.
+  const before = repayEd25519.data.readUInt16LE(14)
+  repayEd25519.data.writeUInt16LE(0x0000, 14)
+  console.log(`  msg_instruction_index: 0x${before.toString(16)} -> 0x0000 (aponta pra ix 0 = ela mesma)`)
+
+  const repayData = Buffer.concat([disc('repay_loan'), cpfHash, u64LE(amount), nonce, i64LE(expiresRepay)])
   const repayIx = new TransactionInstruction({
     programId: PROGRAM_ID,
     keys: [
@@ -135,17 +128,32 @@ async function main() {
   tx2.feePayer = borrower.publicKey
   tx2.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
   tx2.sign(borrower)
-  const sig2 = await conn.sendRawTransaction(tx2.serialize())
-  await conn.confirmTransaction(sig2, 'confirmed')
-  console.log('  ✓ repay tx:', sig2)
-  console.log(`  Explorer: https://explorer.solana.com/tx/${sig2}?cluster=devnet`)
 
-  const loanAfter = await conn.getAccountInfo(loanPda)
-  if (!loanAfter) throw new Error('Loan PDA gone')
-  const statusAfter = loanAfter.data[8 + 32 + 32 + 8 + 2 + 8 + 16 + 1]
-  console.log('\n[5] Loan PDA status (pós-repay):', statusAfter, '(1=Repaid)')
-  if (statusAfter !== 1) throw new Error('Status not Repaid')
-  console.log('  ✅ Cycle close confirmed on-chain')
+  console.log('\n[3] Simulando repay forjado p/ capturar erro exato…')
+  const sim = await conn.simulateTransaction(tx2)
+  const simLog = (sim.value.logs ?? []).filter((l) => /AnchorError|Error|failed/i.test(l)).join('\n')
+  console.log('  sim.err:', JSON.stringify(sim.value.err))
+  if (simLog) console.log('  ' + simLog.replace(/\n/g, '\n  '))
+
+  console.log('\n[4] Enviando repay forjado — DEVE FALHAR…')
+  try {
+    const sig = await conn.sendRawTransaction(tx2.serialize())
+    await conn.confirmTransaction(sig, 'confirmed')
+    console.error('  ❌ FALHA DE SEGURANÇA: repay forjado foi ACEITO! tx:', sig)
+    process.exit(1)
+  } catch (e) {
+    const msg = String((e as Error).message ?? e)
+    const logs = (e as { logs?: string[] }).logs?.join('\n') ?? ''
+    const hit = /InvalidRepayAttestationLayout|0x177d|6013/i.test(msg + logs)
+    console.log('  ✓ repay forjado REJEITADO on-chain')
+    if (hit) {
+      console.log('  ✓ guard InvalidRepayAttestationLayout (6013) disparou')
+      console.log('\n✅ Forja de attestation morta — guard 0xFFFF confirmado on-chain')
+    } else {
+      console.error('  ❌ rejeitado por OUTRO erro (não o guard):', msg.slice(0, 200))
+      process.exit(1)
+    }
+  }
 }
 
 main().catch((e) => { console.error('❌', e); process.exit(1) })

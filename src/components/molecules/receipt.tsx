@@ -38,7 +38,7 @@ export function Receipt({ receipt, decision, onClose }: ReceiptProps) {
       <div style={{ marginTop: 24, background: 'var(--canvas)', borderRadius: 20, padding: '4px 20px' }}>
         <ReceiptRow label="Data e hora" value={`${dateBR(receipt.timestamp)} · ${timeBR(receipt.timestamp)}`} />
         <ReceiptRow label="Destino" value={destinationName} sub={`Chave · ${receipt.to}`} />
-        <ReceiptRow label="Instituição pagadora" value="Uber Money · 24·313·102" sub="Pix · sandbox" />
+        <ReceiptRow label="Instituição pagadora" value="AltPay · 24·313·102" sub="Pix · sandbox" />
         <ReceiptRow label="ID da transação" value={receipt.id} mono />
         <ReceiptRow
           label="Empréstimo"

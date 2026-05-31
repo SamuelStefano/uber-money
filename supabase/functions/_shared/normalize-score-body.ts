@@ -41,6 +41,12 @@ export async function normalizeScoreBody(
     }
   }
 
+  const { count: repaidCount } = await admin
+    .from('loans')
+    .select('id, loan_requests!inner(user_id)', { count: 'exact', head: true })
+    .eq('loan_requests.user_id', userId)
+    .eq('status', 'paid')
+
   const inputs: ScoreInputs = {
     faturamento_mensal_brl,
     amount_brl,
@@ -52,6 +58,7 @@ export async function normalizeScoreBody(
     nota_motorista: Number(body.nota_motorista),
     status_veiculo: body.status_veiculo as ScoreInputs['status_veiculo'],
     negativacao: body.negativacao as ScoreInputs['negativacao'],
+    repaid_loans_count: repaidCount ?? 0,
   }
 
   const errors: string[] = []

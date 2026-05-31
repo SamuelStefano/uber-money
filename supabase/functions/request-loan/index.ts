@@ -11,12 +11,10 @@ import {
 } from '../_shared/score-rules.ts'
 import { normalizeScoreBody } from '../_shared/normalize-score-body.ts'
 import { buildAttestation, type AttestationPayload } from '../_shared/ed25519-attest.ts'
+import { brlToUsdc } from '../_shared/limits.ts'
 
 const IDEMPOTENCY_WINDOW_MS = 5 * 60 * 1000
 const LOAN_TENOR_DAYS = 7
-const USDC_DECIMALS = 1e6
-const BRL_PER_USDC = 5
-const PAYOUT_MAX_BRL = Number(Deno.env.get('PAYOUT_MAX_BRL') ?? '10000')
 
 type LoanReason = 'emergency' | 'vehicle_repair' | 'fuel' | 'other'
 
@@ -94,7 +92,7 @@ serve((req) => withAuth(req, async (req, user) => {
       dueDate: new Date(Date.now() + LOAN_TENOR_DAYS * 24 * 60 * 60 * 1000).toISOString(),
       requestId: prior.id,
       attestation,
-      score_breakdown: emptyBreakdown(),
+      score_breakdown: computeScoreV5(inputs).breakdown,
     }
     return json(resp, 200, req)
   }
@@ -159,7 +157,7 @@ interface AttestationCtx {
 async function maybeBuildAttestation(ctx: AttestationCtx): Promise<AttestationPayload | null> {
   if (!ctx.cpfRaw || ctx.cpfRaw.length !== 11) return null
   if (!ctx.pepperHex || !ctx.borrowerWallet) return null
-  const amountUSDC = BigInt(Math.round(Math.min(ctx.amountBRL, PAYOUT_MAX_BRL) * USDC_DECIMALS / BRL_PER_USDC))
+  const amountUSDC = brlToUsdc(ctx.amountBRL)
   try {
     return await buildAttestation({
       cpf: ctx.cpfRaw,
@@ -179,16 +177,4 @@ function installmentsFor(amountBRL: number): number {
   if (amountBRL <= 3) return 1
   if (amountBRL <= 7) return 2
   return 3
-}
-
-function emptyBreakdown(): ScoreBreakdown {
-  return {
-    tempo_uber: 'ruim',
-    dias_semana: 'ruim',
-    corridas_semana: 'ruim',
-    fonte_renda: 'ruim',
-    nota_motorista: 'ruim',
-    status_veiculo: 'ruim',
-    negativacao: 'ruim',
-  }
 }

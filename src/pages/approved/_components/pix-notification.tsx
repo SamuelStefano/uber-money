@@ -34,7 +34,7 @@ export function PixNotification({ show, amountBRL }: PixNotificationProps) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Uber Money</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>AltPay</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>agora</div>
             </div>
             <div style={{ fontSize: 14, marginTop: 2 }}>

@@ -4,8 +4,9 @@ import { PageHeading } from '@/components/atoms/page-heading'
 import { useStore } from '@/hooks/use-store'
 import { useCountUp } from '@/hooks/use-count-up'
 import { useCreditStatus } from '@/hooks/use-credit-status'
-import { useActiveLoan } from '@/hooks/use-active-loan'
+import { useHome } from '@/hooks/use-home'
 import { Store } from '@/store'
+import { AMOUNT_MAX } from '@/consts/credit'
 import { BalanceCard } from './_components/balance-card'
 import { ActivityList } from './_components/activity-list'
 import { RequestCreditCta } from './_components/request-credit-cta'
@@ -27,10 +28,10 @@ const item = {
 
 export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
   const [s] = useStore()
-  const balance = useCountUp(s.wallet.balanceBRL, { duration: 1300, initialValue: 0 })
-  const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
   const { credit } = useCreditStatus()
-  const { loan, decision } = useActiveLoan()
+  const { loan, decision, balanceBRL, pixKey } = useHome()
+  const balance = useCountUp(balanceBRL, { duration: 1300, initialValue: 0 })
+  const firstName = (s.user?.name ?? 'Samuel').split(' ')[0]
 
   const hasActiveLoan = loan !== null && (loan.status === 'open' || loan.status === 'late')
 
@@ -44,8 +45,8 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
   const scoreCaption = credit.has_request
     ? 'Calculado a partir dos seus ganhos do Uber'
     : 'Análise instantânea · sem consulta ao SPC'
-  const limitHint = credit.has_request && credit.interest_pct
-    ? `Juros a partir de ${(credit.interest_pct * 100).toFixed(1)}%/mês`
+  const limitHint = credit.has_request
+    ? `Sobe a cada empréstimo pago em dia · saque até R$${AMOUNT_MAX} agora`
     : 'Análise leva segundos · libera USDC na hora'
 
   return (
@@ -73,13 +74,13 @@ export function HomeScreen({ onRequestCredit, onRepay }: HomeScreenProps) {
             {hasActiveLoan && loan ? (
               <ActiveLoanCard
                 principalBRL={loan.principal_brl}
-                interestPct={loan.interest_pct}
+                interestPct={Number(loan.interest_pct) * 100}
                 dueDate={loan.due_date}
                 status={loan.status as 'open' | 'late'}
                 onRepay={handleRepay}
               />
             ) : (
-              <BalanceCard balance={balance} pixKey={s.wallet.pixKey} />
+              <BalanceCard balance={balance} pixKey={pixKey} />
             )}
           </motion.div>
 

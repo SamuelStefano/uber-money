@@ -1,17 +1,24 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
-import { jsonOpen, handleOptionsOpen } from '../_shared/cors.ts'
+import { json } from '../_shared/cors.ts'
 import { admin } from '../_shared/admin.ts'
+import { withAuth } from '../_shared/with-auth.ts'
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return handleOptionsOpen()
+const ENVIRONMENT = (Deno.env.get('ENVIRONMENT') ?? '').toLowerCase()
+const ALLOWED_ENVS = new Set(['development', 'sandbox', 'staging', 'local'])
+
+serve((req) => withAuth(req, async (req, user) => {
+  if (!ALLOWED_ENVS.has(ENVIRONMENT)) {
+    return json({ error: 'dev-reset disabled in this environment' }, 403, req)
+  }
 
   let body: { wallet?: string }
-  try { body = await req.json() } catch { return jsonOpen({ error: 'Invalid JSON' }, 400) }
+  try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400, req) }
   const wallet = body.wallet?.trim()
-  if (!wallet) return jsonOpen({ error: 'wallet required' }, 400)
+  if (!wallet) return json({ error: 'wallet required' }, 400, req)
 
-  const { data: u } = await admin.from('users').select('id').eq('wallet', wallet).maybeSingle()
-  if (!u) return jsonOpen({ ok: true, wiped: 0, note: 'wallet not found — nothing to do' }, 200)
+  const { data: u } = await admin.from('users').select('id, wallet').eq('wallet', wallet).maybeSingle()
+  if (!u) return json({ ok: true, wiped: 0, note: 'wallet not found — nothing to do' }, 200, req)
+  if (u.id !== user.id) return json({ error: 'Forbidden — wallet not owned by caller' }, 403, req)
 
   const userId = u.id
   const report: Record<string, number | string> = { userId }
@@ -27,22 +34,39 @@ serve(async (req) => {
   const reqIds = (reqs ?? []).map((r: { id: string }) => r.id)
   report.loan_requests = reqIds.length
 
+  const fail = (step: string, message: string) =>
+    json({ error: `dev-reset failed at ${step}`, details: message, report }, 500, req)
+
   if (reqIds.length) {
     for (let i = 0; i < reqIds.length; i += 100) {
       const slice = reqIds.slice(i, i + 100)
       const { data: loans } = await admin.from('loans').select('id').in('request_id', slice)
       const loanIds = (loans ?? []).map((l: { id: string }) => l.id)
-      if (loanIds.length) await admin.from('payouts').delete().in('loan_id', loanIds)
-      await admin.from('score_snapshots').delete().in('request_id', slice)
-      await admin.from('loans').delete().in('request_id', slice)
-      await admin.from('loan_requests').delete().in('id', slice)
+      // cashout_intents tem FK ON DELETE RESTRICT em loan_id e pix_payout_id;
+      // apaga antes de payouts/loans senão o wipe viola a constraint.
+      if (loanIds.length) {
+        const { error } = await admin.from('cashout_intents').delete().in('loan_id', loanIds)
+        if (error) return fail('cashout_intents', error.message)
+        const { error: pErr } = await admin.from('payouts').delete().in('loan_id', loanIds)
+        if (pErr) return fail('payouts', pErr.message)
+      }
+      const { error: sErr } = await admin.from('score_snapshots').delete().in('request_id', slice)
+      if (sErr) return fail('score_snapshots', sErr.message)
+      const { error: lErr } = await admin.from('loans').delete().in('request_id', slice)
+      if (lErr) return fail('loans', lErr.message)
+      const { error: rErr } = await admin.from('loan_requests').delete().in('id', slice)
+      if (rErr) return fail('loan_requests', rErr.message)
     }
   }
+  const { error: ciErr } = await admin.from('cashout_intents').delete().eq('user_id', userId)
+  if (ciErr) return fail('cashout_intents_user', ciErr.message)
 
-  await admin.from('documents').delete().eq('user_id', userId)
-  await admin.from('users').delete().eq('id', userId)
+  const { error: dErr } = await admin.from('documents').delete().eq('user_id', userId)
+  if (dErr) return fail('documents', dErr.message)
+  const { error: uErr } = await admin.from('users').delete().eq('id', userId)
+  if (uErr) return fail('users', uErr.message)
   const { error: authErr } = await admin.auth.admin.deleteUser(userId)
   report.auth_user_deleted = authErr ? authErr.message : 'ok'
 
-  return jsonOpen({ ok: true, ...report }, 200)
-})
+  return json({ ok: true, ...report }, 200, req)
+}))

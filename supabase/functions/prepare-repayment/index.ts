@@ -4,9 +4,11 @@ import { admin } from '../_shared/admin.ts'
 import { withAuth } from '../_shared/with-auth.ts'
 import { createCharge, WOOVI_MODE } from '../_shared/woovi.ts'
 import { hexToBytes } from '../_shared/bytes.ts'
+import { brlToUsdc, cappedBRL } from '../_shared/limits.ts'
+import { generateAndStoreRepayAttestation } from '../_shared/repay-attestation.ts'
+import { deriveCpfHash } from '../_shared/cpf-hash.ts'
 
 const PROGRAM_ID = '6m2ipcrUCRpSqkPSqNNKNH11rNmVsu8KmnBLnBtFsq2N'
-const BRL_PER_USDC = 5
 
 serve((req) => withAuth(req, async (req, user) => {
   let body: { loanId?: unknown }
@@ -17,7 +19,7 @@ serve((req) => withAuth(req, async (req, user) => {
 
   const { data: loan } = await admin
     .from('loans')
-    .select('id, request_id, principal_brl, interest_pct, status, on_chain_pda, loan_requests!inner(user_id, cpf_hash)')
+    .select('id, request_id, principal_brl, interest_pct, status, cpf_hash, loan_requests!inner(user_id, cpf_hash)')
     .eq('id', loanId)
     .maybeSingle()
 
@@ -25,8 +27,21 @@ serve((req) => withAuth(req, async (req, user) => {
   if ((loan as any).loan_requests.user_id !== user.id) return json({ error: 'Forbidden' }, 403, req)
   if (loan.status !== 'open') return json({ error: `Loan status is ${loan.status}, cannot repay` }, 409, req)
 
-  const amountBRL = Number(loan.principal_brl) * (1 + Number(loan.interest_pct))
-  const amountUSDC = BigInt(Math.round(Math.min(amountBRL, 10000) * 1e6 / BRL_PER_USDC))
+  const toCpfBytes = (raw: unknown): Uint8Array | null => {
+    const bytes = typeof raw === 'string' ? hexToBytes(raw) : raw instanceof Uint8Array ? raw : null
+    return bytes && bytes.length === 32 ? bytes : null
+  }
+  let cpfHashBytes = toCpfBytes((loan as any).cpf_hash) ?? toCpfBytes((loan as any).loan_requests.cpf_hash)
+  if (!cpfHashBytes) {
+    const derived = await deriveCpfHash(admin, user.id)
+    if (!derived.ok) return json({ error: derived.error }, derived.status, req)
+    cpfHashBytes = derived.cpfHash
+    await admin.from('loans').update({ cpf_hash: derived.cpfHashHex }).eq('id', loanId)
+    await admin.from('loan_requests').update({ cpf_hash: derived.cpfHashHex }).eq('id', loan.request_id)
+  }
+
+  const amountBRL = cappedBRL(Number(loan.principal_brl) * (1 + Number(loan.interest_pct)))
+  const amountUSDC = brlToUsdc(amountBRL)
 
   const { data: existing } = await admin
     .from('payouts')
@@ -35,6 +50,13 @@ serve((req) => withAuth(req, async (req, user) => {
     .eq('kind', 'repay')
     .in('status', ['pending', 'confirmed'])
     .maybeSingle()
+
+  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
+  const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
+    [new TextEncoder().encode('loan'), cpfHashBytes],
+    new PublicKey(PROGRAM_ID),
+  )
+  const loanPda = loanPdaPubkey.toBase58()
 
   if (existing) {
     const woovi = (existing.woovi_payload ?? {}) as Record<string, unknown>
@@ -45,27 +67,13 @@ serve((req) => withAuth(req, async (req, user) => {
       qrCodeImage: (woovi.qrCodeImage as string) ?? '',
       amountBRL,
       amountUSDC: amountUSDC.toString(),
-      loanPda: (loan as any).on_chain_pda ?? '',
+      loanPda,
       status: existing.status,
       mode: WOOVI_MODE,
       expiresAt: (woovi.expiresAt as string) ?? null,
       attestation: existing.attestation_payload ?? null,
     }, 200, req)
   }
-
-  const cpfHashRaw: unknown = (loan as any).loan_requests.cpf_hash
-  const cpfHashBytes = typeof cpfHashRaw === 'string'
-    ? hexToBytes(cpfHashRaw)
-    : cpfHashRaw instanceof Uint8Array
-      ? cpfHashRaw
-      : new Uint8Array(32)
-
-  const { PublicKey } = await import('npm:@solana/web3.js@1.95.0')
-  const [loanPdaPubkey] = PublicKey.findProgramAddressSync(
-    [new TextEncoder().encode('loan'), cpfHashBytes],
-    new PublicKey(PROGRAM_ID),
-  )
-  const loanPda = loanPdaPubkey.toBase58()
 
   const correlationId = crypto.randomUUID()
 
@@ -100,7 +108,7 @@ serve((req) => withAuth(req, async (req, user) => {
       kind: 'repay',
       amount_brl: amountBRL,
       pix_key: 'pix-in-charge',
-      pix_key_type: 'random',
+      pix_key_type: 'evp',
       status: 'pending',
       woovi_correlation_id: correlationId,
       woovi_payload: {
@@ -114,6 +122,21 @@ serve((req) => withAuth(req, async (req, user) => {
     .single()
 
   if (insErr || !inserted) return json({ error: insErr?.message ?? 'Insert failed' }, 500, req)
+
+  // mock/sandbox não recebem webhook Woovi: auto-confirma o Pix e gera a attestation
+  // (espelha o auto-confirm do release em request-payout) senão o repay trava em pending.
+  if (WOOVI_MODE !== 'prod') {
+    const payoutId = inserted.id
+    const autoConfirm = async () => {
+      await new Promise((r) => setTimeout(r, 6000))
+      const { data: confirmed } = await admin.from('payouts')
+        .update({ status: 'confirmed', endtoend_id: `MOCK-${correlationId.slice(0, 8)}` })
+        .eq('id', payoutId).eq('status', 'pending').select('id').maybeSingle()
+      if (confirmed) await generateAndStoreRepayAttestation(payoutId, loanId)
+    }
+    ;(globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime
+      ?.waitUntil(autoConfirm())
+  }
 
   return json({
     payoutId: inserted.id,
