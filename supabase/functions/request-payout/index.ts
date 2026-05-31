@@ -6,10 +6,9 @@ import { withAuth } from '../_shared/with-auth.ts'
 import { isValidCpf } from '../_shared/cpf.ts'
 import { deriveCpfHash } from '../_shared/cpf-hash.ts'
 import { cappedBRL, brlToUsdc } from '../_shared/limits.ts'
+import { WOOVI_BASE_URL, WOOVI_MODE } from '../_shared/woovi.ts'
 
 const WOOVI_API_KEY = Deno.env.get('WOOVI_API_KEY') ?? ''
-const WOOVI_BASE = Deno.env.get('WOOVI_API_URL') ?? 'https://api.openpix.com.br/api/v1'
-const WOOVI_MODE = (Deno.env.get('WOOVI_MODE') ?? 'mock').toLowerCase()
 
 type ReleaseBody = { action: 'release'; loanId: string }
 type PayoutBody  = { action: 'payout';  loanId: string; pixKey: string; pixKeyType: 'cpf' | 'email' | 'phone' | 'evp' }
@@ -192,12 +191,14 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
 
   const { data: cnhDocForCustomer } = await admin
     .from('documents').select('ocr_data').eq('user_id', userId).eq('kind', 'cnh').maybeSingle()
-  const customerCpf = ((cnhDocForCustomer?.ocr_data as { cpf?: string } | null)?.cpf ?? '').replace(/\D/g, '')
+  const cnhOcr = cnhDocForCustomer?.ocr_data as { cpf?: string; name?: string } | null
+  const customerCpf = (cnhOcr?.cpf ?? '').replace(/\D/g, '')
+  const customerName = cnhOcr?.name?.trim()
   const { data: authUser } = await admin.auth.admin.getUserById(userId)
   const customerEmail = authUser?.user?.email
   const customerPhone = authUser?.user?.phone
 
-  const customer: Record<string, string> = { name: 'Motorista Uber Money' }
+  const customer: Record<string, string> = { name: customerName || 'Motorista Uber Money' }
   const candidateCpf = (customerCpf && customerCpf.length === 11)
     ? customerCpf
     : (body.pixKeyType === 'cpf' ? body.pixKey.replace(/\D/g, '') : '')
@@ -216,7 +217,7 @@ async function handlePayout(req: Request, admin: SupabaseClient, userId: string,
   }
 
   try {
-    const wooviRes = await fetch(`${WOOVI_BASE}/charge`, {
+    const wooviRes = await fetch(`${WOOVI_BASE_URL}/charge`, {
       method: 'POST',
       headers: { 'Authorization': WOOVI_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({

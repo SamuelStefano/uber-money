@@ -175,13 +175,17 @@ serve((req) => withAuth(req, async (req, user) => {
 
   await admin.from('users').update({ pix_key: body.pixKey, pix_key_type: body.pixKeyType }).eq('id', user.id)
 
+  const { data: cnhForName } = await admin
+    .from('documents').select('ocr_data').eq('user_id', user.id).eq('kind', 'cnh').maybeSingle()
+  const customerName = (cnhForName?.ocr_data as { name?: string } | null)?.name?.trim()
+
   let charge
   try {
     charge = await createCharge({
       correlationId,
       amountBRL,
       comment: `Uber Money - saque emprestimo ${body.loanId.slice(0, 8)}`,
-      customer: { name: 'Motorista Uber Money', ...(body.pixKeyType === 'cpf' && isValidCpf(body.pixKey.replace(/\D/g, '')) ? { taxID: body.pixKey.replace(/\D/g, '') } : {}) },
+      customer: { name: customerName || 'Motorista Uber Money', ...(body.pixKeyType === 'cpf' && isValidCpf(body.pixKey.replace(/\D/g, '')) ? { taxID: body.pixKey.replace(/\D/g, '') } : {}) },
     })
   } catch (e) {
     await admin.from('payouts').update({ status: 'failed', error_message: String(e) }).eq('id', payout.id)
